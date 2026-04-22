@@ -23,8 +23,6 @@ services:
       - ASPNETCORE_URLS=http://+:5000
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=burnup;Username=burnup;Password=burnup
-    ports:
-      - "5000:5000"   # exposed so Swagger UI is reachable at http://localhost:5000/swagger
     depends_on:
       db:
         condition: service_healthy
@@ -34,6 +32,8 @@ services:
     build:
       context: .
       dockerfile: frontend.Dockerfile
+    environment:
+      - BACKEND_URL=http://backend:5000   # override to point at a different backend
     ports:
       - "8080:80"     # app is at http://localhost:8080
     depends_on:

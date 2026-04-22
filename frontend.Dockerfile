@@ -10,6 +10,8 @@ RUN sed -i \
     "s|// window.__BURNUP_API__ = 'http://localhost:5000';|window.__BURNUP_API__ = '';|" \
     "/usr/share/nginx/html/Burnup PM Tool.html"
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# nginx:alpine processes *.template files in /etc/nginx/templates/ at startup via envsubst,
+# substituting env vars (e.g. BACKEND_URL) while leaving nginx variables ($host etc.) intact.
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
