@@ -8,26 +8,26 @@ namespace BurnupApi.Controllers;
 
 [ApiController]
 [Route("api/projects")]
-public class ProjectsController(InMemoryStore store, BurnupService burnup) : ControllerBase
+public class ProjectsController(DataStore store, BurnupService burnup) : ControllerBase
 {
     [HttpGet]
-    public IActionResult GetAll() => Ok(store.GetProjects());
+    public async Task<IActionResult> GetAll() => Ok(await store.GetProjectsAsync());
 
     [HttpGet("{id}")]
-    public IActionResult Get(string id)
+    public async Task<IActionResult> Get(string id)
     {
-        var project = store.GetProject(id);
+        var project = await store.GetProjectAsync(id);
         return project is null ? NotFound() : Ok(project);
     }
 
     [HttpPost]
-    public IActionResult Create([FromBody] CreateProjectRequest req)
+    public async Task<IActionResult> Create([FromBody] CreateProjectRequest req)
     {
         if (!DateOnly.TryParse(req.StartDate, out var startDate))
             return BadRequest("StartDate must be yyyy-MM-dd.");
 
         var id = req.Name.ToLowerInvariant().Replace(" ", "-");
-        if (store.GetProject(id) is not null)
+        if (await store.GetProjectAsync(id) is not null)
             return Conflict($"A project with id '{id}' already exists.");
 
         var project = new Project
@@ -40,15 +40,14 @@ public class ProjectsController(InMemoryStore store, BurnupService burnup) : Con
             StartDate   = startDate,
         };
 
-        store.AddProject(project);
+        await store.AddProjectAsync(project);
         return CreatedAtAction(nameof(Get), new { id = project.Id }, project);
     }
 
     [HttpPut("{id}")]
-    public IActionResult Update(string id, [FromBody] UpdateProjectRequest req)
+    public async Task<IActionResult> Update(string id, [FromBody] UpdateProjectRequest req)
     {
-        var existing = store.GetProject(id);
-        if (existing is null) return NotFound();
+        if (await store.GetProjectAsync(id) is null) return NotFound();
 
         if (!DateOnly.TryParse(req.StartDate, out var startDate))
             return BadRequest("StartDate must be yyyy-MM-dd.");
@@ -63,20 +62,20 @@ public class ProjectsController(InMemoryStore store, BurnupService burnup) : Con
             StartDate   = startDate,
         };
 
-        store.UpdateProject(updated);
+        await store.UpdateProjectAsync(updated);
         return Ok(updated);
     }
 
     [HttpDelete("{id}")]
-    public IActionResult Delete(string id) =>
-        store.DeleteProject(id) ? NoContent() : NotFound();
+    public async Task<IActionResult> Delete(string id) =>
+        await store.DeleteProjectAsync(id) ? NoContent() : NotFound();
 
     // ── Burnup ───────────────────────────────────────────────────────
 
     [HttpGet("{id}/burnup")]
-    public IActionResult GetBurnup(string id, [FromQuery] string? today = null)
+    public async Task<IActionResult> GetBurnup(string id, [FromQuery] string? today = null)
     {
-        var project = store.GetProject(id);
+        var project = await store.GetProjectAsync(id);
         if (project is null) return NotFound();
 
         DateOnly? todayDate = null;
@@ -87,7 +86,7 @@ public class ProjectsController(InMemoryStore store, BurnupService burnup) : Con
             todayDate = td;
         }
 
-        var cards  = store.GetCards(id);
+        var cards  = await store.GetCardsAsync(id);
         var series = burnup.BuildBurnup(cards, project.StartDate, todayDate);
         return Ok(series);
     }

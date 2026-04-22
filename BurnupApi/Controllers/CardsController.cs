@@ -8,40 +8,39 @@ namespace BurnupApi.Controllers;
 
 [ApiController]
 [Route("api/cards")]
-public class CardsController(InMemoryStore store) : ControllerBase
+public class CardsController(DataStore store) : ControllerBase
 {
     private static readonly string[] ValidTypes  = ["feature", "bug", "no-code", "tiny"];
     private static readonly string[] ValidScopes = ["mvp", "mlp", "other"];
     private static readonly string[] ValidUnits  = ["days", "points"];
 
     [HttpGet]
-    public IActionResult GetAll([FromQuery] string? projectId = null)
+    public async Task<IActionResult> GetAll([FromQuery] string? projectId = null)
     {
-        var cards = store.GetCards(projectId);
-        return Ok(cards.Select(c => ToResponse(c, store)));
+        var cards = await store.GetCardsAsync(projectId);
+        return Ok(await Task.WhenAll(cards.Select(c => ToResponseAsync(c, store))));
     }
 
     [HttpGet("{uid}")]
-    public IActionResult Get(string uid)
+    public async Task<IActionResult> Get(string uid)
     {
-        var card = store.GetCard(uid);
-        return card is null ? NotFound() : Ok(ToResponse(card, store));
+        var card = await store.GetCardAsync(uid);
+        return card is null ? NotFound() : Ok(await ToResponseAsync(card, store));
     }
 
     [HttpPost]
-    public IActionResult Create([FromBody] CreateCardRequest req)
+    public async Task<IActionResult> Create([FromBody] CreateCardRequest req)
     {
-        var project = store.GetProject(req.ProjectId);
-        if (project is null)
+        if (await store.GetProjectAsync(req.ProjectId) is null)
             return BadRequest($"Project '{req.ProjectId}' not found.");
 
         if (ValidateCard(req.Type, req.Scope, req.EstimationUnit, req.CreatedDate, req.StartedDate, req.EndDate,
-            out var validationError, out var createdDate, out var startedDate, out var endDate))
-            return BadRequest(validationError);
+            out var error, out var created, out var started, out var ended))
+            return BadRequest(error);
 
         var uid = $"{req.ProjectId}:{Guid.NewGuid():N}";
 
-        if (store.CardNumberConflicts(req.ProjectId, uid, req.CardNumber))
+        if (await store.CardNumberConflictsAsync(req.ProjectId, uid, req.CardNumber))
             return Conflict($"Card number {req.CardNumber} is already used in project '{req.ProjectId}'.");
 
         var card = new Card
@@ -50,9 +49,9 @@ public class CardsController(InMemoryStore store) : ControllerBase
             CardNumber     = req.CardNumber,
             ProjectId      = req.ProjectId,
             Title          = req.Title,
-            CreatedDate    = createdDate,
-            StartedDate    = startedDate,
-            EndDate        = endDate,
+            CreatedDate    = created,
+            StartedDate    = started,
+            EndDate        = ended,
             Estimation     = req.Estimation,
             EstimationUnit = req.EstimationUnit,
             EstimationDays = DomainService.CalculateEstimationDays(req.Estimation, req.EstimationUnit),
@@ -60,21 +59,21 @@ public class CardsController(InMemoryStore store) : ControllerBase
             Scope          = req.Scope,
         };
 
-        store.AddCard(card);
-        return CreatedAtAction(nameof(Get), new { uid = card.Uid }, ToResponse(card, store));
+        await store.AddCardAsync(card);
+        return CreatedAtAction(nameof(Get), new { uid = card.Uid }, await ToResponseAsync(card, store));
     }
 
     [HttpPut("{uid}")]
-    public IActionResult Update(string uid, [FromBody] UpdateCardRequest req)
+    public async Task<IActionResult> Update(string uid, [FromBody] UpdateCardRequest req)
     {
-        var existing = store.GetCard(uid);
+        var existing = await store.GetCardAsync(uid);
         if (existing is null) return NotFound();
 
         if (ValidateCard(req.Type, req.Scope, req.EstimationUnit, req.CreatedDate, req.StartedDate, req.EndDate,
-            out var validationError, out var createdDate, out var startedDate, out var endDate))
-            return BadRequest(validationError);
+            out var error, out var created, out var started, out var ended))
+            return BadRequest(error);
 
-        if (store.CardNumberConflicts(existing.ProjectId, uid, req.CardNumber))
+        if (await store.CardNumberConflictsAsync(existing.ProjectId, uid, req.CardNumber))
             return Conflict($"Card number {req.CardNumber} is already used in project '{existing.ProjectId}'.");
 
         var updated = new Card
@@ -83,9 +82,9 @@ public class CardsController(InMemoryStore store) : ControllerBase
             CardNumber     = req.CardNumber,
             ProjectId      = existing.ProjectId,
             Title          = req.Title,
-            CreatedDate    = createdDate,
-            StartedDate    = startedDate,
-            EndDate        = endDate,
+            CreatedDate    = created,
+            StartedDate    = started,
+            EndDate        = ended,
             Estimation     = req.Estimation,
             EstimationUnit = req.EstimationUnit,
             EstimationDays = DomainService.CalculateEstimationDays(req.Estimation, req.EstimationUnit),
@@ -93,19 +92,19 @@ public class CardsController(InMemoryStore store) : ControllerBase
             Scope          = req.Scope,
         };
 
-        store.UpdateCard(updated);
-        return Ok(ToResponse(updated, store));
+        await store.UpdateCardAsync(updated);
+        return Ok(await ToResponseAsync(updated, store));
     }
 
     [HttpDelete("{uid}")]
-    public IActionResult Delete(string uid) =>
-        store.DeleteCard(uid) ? NoContent() : NotFound();
+    public async Task<IActionResult> Delete(string uid) =>
+        await store.DeleteCardAsync(uid) ? NoContent() : NotFound();
 
     // ── Helpers ───────────────────────────────────────────────────
 
-    private static CardResponse ToResponse(Card card, InMemoryStore store)
+    private static async Task<CardResponse> ToResponseAsync(Card card, DataStore store)
     {
-        var project   = store.GetProject(card.ProjectId);
+        var project   = await store.GetProjectAsync(card.ProjectId);
         var displayId = project is not null ? DomainService.GetDisplayId(card, project) : $"???-{card.CardNumber:D3}";
         return new CardResponse(
             Uid:            card.Uid,
@@ -125,12 +124,10 @@ public class CardsController(InMemoryStore store) : ControllerBase
         );
     }
 
-    // Returns true if there is a validation error (sets validationError).
-    // Returns false on success (sets the parsed date outputs).
     private static bool ValidateCard(
         string type, string scope, string estimationUnit,
         string createdDateStr, string? startedDateStr, string? endDateStr,
-        out string? validationError,
+        out string? error,
         out DateOnly createdDate, out DateOnly? startedDate, out DateOnly? endDate)
     {
         createdDate = default;
@@ -138,50 +135,32 @@ public class CardsController(InMemoryStore store) : ControllerBase
         endDate     = null;
 
         if (!ValidTypes.Contains(type))
-        {
-            validationError = $"Type must be one of: {string.Join(", ", ValidTypes)}.";
-            return true;
-        }
+        { error = $"Type must be one of: {string.Join(", ", ValidTypes)}."; return true; }
 
         if (!ValidScopes.Contains(scope))
-        {
-            validationError = $"Scope must be one of: {string.Join(", ", ValidScopes)}.";
-            return true;
-        }
+        { error = $"Scope must be one of: {string.Join(", ", ValidScopes)}."; return true; }
 
         if (!ValidUnits.Contains(estimationUnit))
-        {
-            validationError = $"EstimationUnit must be one of: {string.Join(", ", ValidUnits)}.";
-            return true;
-        }
+        { error = $"EstimationUnit must be one of: {string.Join(", ", ValidUnits)}."; return true; }
 
         if (!DateOnly.TryParse(createdDateStr, out createdDate))
-        {
-            validationError = "CreatedDate must be yyyy-MM-dd.";
-            return true;
-        }
+        { error = "CreatedDate must be yyyy-MM-dd."; return true; }
 
         if (startedDateStr is not null)
         {
             if (!DateOnly.TryParse(startedDateStr, out var sd))
-            {
-                validationError = "StartedDate must be yyyy-MM-dd.";
-                return true;
-            }
+            { error = "StartedDate must be yyyy-MM-dd."; return true; }
             startedDate = sd;
         }
 
         if (endDateStr is not null)
         {
             if (!DateOnly.TryParse(endDateStr, out var ed))
-            {
-                validationError = "EndDate must be yyyy-MM-dd.";
-                return true;
-            }
+            { error = "EndDate must be yyyy-MM-dd."; return true; }
             endDate = ed;
         }
 
-        validationError = null;
+        error = null;
         return false;
     }
 }

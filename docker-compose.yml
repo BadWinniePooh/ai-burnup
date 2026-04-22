@@ -1,5 +1,20 @@
 services:
 
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: burnup
+      POSTGRES_USER: burnup
+      POSTGRES_PASSWORD: burnup
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U burnup -d burnup"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build:
       context: ./BurnupApi
@@ -7,8 +22,12 @@ services:
     environment:
       - ASPNETCORE_URLS=http://+:5000
       - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=burnup;Username=burnup;Password=burnup
     ports:
       - "5000:5000"   # exposed so Swagger UI is reachable at http://localhost:5000/swagger
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -20,3 +39,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  db_data:
