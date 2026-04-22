@@ -2,7 +2,9 @@
 // Override the base URL by setting window.__BURNUP_API__ before loading scripts:
 //   <script>window.__BURNUP_API__ = 'http://localhost:5000';</script>
 
-const _BASE = ((window.__BURNUP_API__ || 'http://localhost:5000') + '').replace(/\/$/, '');
+// Use ?? so an explicitly empty string (Docker / nginx-proxy mode) is respected.
+// Falls back to localhost:5000 only when the variable is not defined at all.
+const _BASE = (window.__BURNUP_API__ !== undefined ? window.__BURNUP_API__ : 'http://localhost:5000').replace(/\/$/, '');
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(_BASE + path, {

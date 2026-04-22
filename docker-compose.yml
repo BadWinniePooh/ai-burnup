@@ -1,0 +1,22 @@
+services:
+
+  backend:
+    build:
+      context: ./BurnupApi
+      dockerfile: Dockerfile
+    environment:
+      - ASPNETCORE_URLS=http://+:5000
+      - ASPNETCORE_ENVIRONMENT=Production
+    ports:
+      - "5000:5000"   # exposed so Swagger UI is reachable at http://localhost:5000/swagger
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    ports:
+      - "8080:80"     # app is at http://localhost:8080
+    depends_on:
+      - backend
+    restart: unless-stopped
