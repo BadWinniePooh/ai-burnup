@@ -1,23 +1,43 @@
-// Dashboard — a reporting view with stats + two burnup charts.
+// Dashboard — reporting view with stats + two burnup charts.
+// Burnup series is fetched from the backend; card breakdown is derived from the
+// cards already in local state so the view stays snappy after card edits.
 
 function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
+  const [series, setSeries] = React.useState([]);
+  const [burnupLoading, setBurnupLoading] = React.useState(true);
+
+  // Re-fetch burnup whenever project or the cards list changes.
+  // The cards dependency is shallow-keyed on count + last endDate so we avoid
+  // refetching on every keystroke (only when a card's completion status changes).
+  const burnupKey = React.useMemo(() => {
+    const doneCards = cards.filter(c => c.endDate);
+    return `${project.id}|${cards.length}|${doneCards.map(c => c.uid + c.endDate).join(',')}`;
+  }, [project.id, cards]);
+
+  React.useEffect(() => {
+    setBurnupLoading(true);
+    window.api.getBurnup(project.id)
+      .then(setSeries)
+      .catch(() => setSeries([]))
+      .finally(() => setBurnupLoading(false));
+  }, [burnupKey]);
+
   const filtered = cards.filter(c => c.projectId === project.id);
-  const series = React.useMemo(() => window.buildBurnup(filtered, project.startDate), [filtered, project]);
 
   const countSeries = series.map(s => ({ date: s.date, scope: s.scopeCount, done: s.doneCount }));
-  const daysSeries = series.map(s => ({ date: s.date, scope: Math.round(s.scopeDays * 10) / 10, done: Math.round(s.doneDays * 10) / 10 }));
+  const daysSeries  = series.map(s => ({ date: s.date, scope: Math.round(s.scopeDays * 10) / 10, done: Math.round(s.doneDays * 10) / 10 }));
 
   const latest = series[series.length - 1] || { scopeCount: 0, doneCount: 0, scopeDays: 0, doneDays: 0 };
   const pctCards = latest.scopeCount ? Math.round((latest.doneCount / latest.scopeCount) * 100) : 0;
-  const pctDays = latest.scopeDays ? Math.round((latest.doneDays / latest.scopeDays) * 100) : 0;
+  const pctDays  = latest.scopeDays  ? Math.round((latest.doneDays  / latest.scopeDays)  * 100) : 0;
   const remaining = latest.scopeCount - latest.doneCount;
 
-  // Velocity (last 14d)
+  // Velocity over last 14 days
   const last14 = series.slice(-15);
-  const doneInWindow = last14.length > 1 ? last14[last14.length - 1].doneCount - last14[0].doneCount : 0;
+  const doneInWindow     = last14.length > 1 ? last14[last14.length - 1].doneCount - last14[0].doneCount : 0;
   const daysDoneInWindow = last14.length > 1 ? Math.round(last14[last14.length - 1].doneDays - last14[0].doneDays) : 0;
 
-  // Projected completion: linear extrapolation from last 14d velocity
+  // Projected completion via linear extrapolation from last-14d velocity
   let projection = null;
   if (doneInWindow > 0 && remaining > 0) {
     const daysToDone = Math.round((remaining / doneInWindow) * 14);
@@ -25,11 +45,10 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
     projection = window.dateKey(projDate);
   }
 
-  // Breakdown by type and scope
-  const byType = {};
-  const byScope = {};
+  // Breakdown by type and scope (from local card state — always up to date)
+  const byType = {}, byScope = {};
   for (const c of filtered) {
-    byType[c.type] = (byType[c.type] || 0) + 1;
+    byType[c.type]   = (byType[c.type]   || 0) + 1;
     byScope[c.scope] = (byScope[c.scope] || 0) + 1;
   }
 
@@ -46,16 +65,16 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace' }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: theme.success, boxShadow: `0 0 0 3px color-mix(in oklch, ${theme.success} 25%, transparent)` }}></span>
-          Live · updated 2026-04-22
+          Live · updated {window.TODAY}
         </div>
       </div>
 
       {/* Stat grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-        <StatCard theme={theme} label="Total cards" value={latest.scopeCount} sub={`${remaining} remaining`} />
-        <StatCard theme={theme} label="Completed" value={latest.doneCount} sub={`${pctCards}% of scope`} accent />
-        <StatCard theme={theme} label="Scope · days" value={Math.round(latest.scopeDays)} sub={`${Math.round(latest.doneDays)} done · ${pctDays}%`} />
-        <StatCard theme={theme} label="Velocity" value={doneInWindow} sub={`${daysDoneInWindow}d over last 14d`} />
+        <StatCard theme={theme} label="Total cards"   value={latest.scopeCount}           sub={`${remaining} remaining`} />
+        <StatCard theme={theme} label="Completed"     value={latest.doneCount}             sub={`${pctCards}% of scope`} accent />
+        <StatCard theme={theme} label="Scope · days"  value={Math.round(latest.scopeDays)} sub={`${Math.round(latest.doneDays)} done · ${pctDays}%`} />
+        <StatCard theme={theme} label="Velocity"      value={doneInWindow}                 sub={`${daysDoneInWindow}d over last 14d`} />
       </div>
 
       {/* Charts row */}
@@ -65,6 +84,7 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
           title="Cards burnup"
           subtitle="Total scope vs. completed cards over time"
           pct={pctCards}
+          loading={burnupLoading}
           chart={<window.BurnupChart data={countSeries} scopeLabel="Scope" doneLabel="Done" accent={theme.accent} muted={theme.textMuted} dark={theme.dark} style={chartStyle} height={260} />}
         />
         <ChartCard
@@ -72,13 +92,14 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
           title="Effort burnup · days"
           subtitle="Total estimated days vs. days delivered"
           pct={pctDays}
+          loading={burnupLoading}
           chart={<window.BurnupChart data={daysSeries} scopeLabel="Total d" doneLabel="Done d" accent={theme.accent} muted={theme.textMuted} dark={theme.dark} style={chartStyle} height={260} />}
         />
       </div>
 
       {/* Breakdown row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-        <BreakdownCard theme={theme} title="By type" items={byType} meta={window.TYPE_META} mode="type" />
+        <BreakdownCard theme={theme} title="By type"  items={byType}  meta={window.TYPE_META} mode="type" />
         <BreakdownCard theme={theme} title="By scope" items={byScope} mode="scope" />
         <ProjectionCard theme={theme} projection={projection} remaining={remaining} velocity={doneInWindow} />
       </div>
@@ -88,12 +109,7 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
 
 function StatCard({ theme, label, value, sub, accent }) {
   return (
-    <div style={{
-      background: theme.surface,
-      border: `1px solid ${theme.border}`,
-      borderRadius: 10,
-      padding: '14px 16px',
-    }}>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '14px 16px' }}>
       <div style={{ fontSize: 11, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em', color: accent ? theme.accent : theme.text, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
       <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{sub}</div>
@@ -101,25 +117,23 @@ function StatCard({ theme, label, value, sub, accent }) {
   );
 }
 
-function ChartCard({ theme, title, subtitle, pct, chart }) {
+function ChartCard({ theme, title, subtitle, pct, loading, chart }) {
   return (
-    <div style={{
-      background: theme.surface,
-      border: `1px solid ${theme.border}`,
-      borderRadius: 10,
-      padding: 18,
-    }}>
+    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{title}</div>
           <div style={{ fontSize: 12, color: theme.textMuted }}>{subtitle}</div>
         </div>
         <div style={{ textAlign: 'right', fontFamily: 'ui-monospace, Menlo, monospace' }}>
-          <div style={{ fontSize: 22, fontWeight: 600, color: theme.accent, fontVariantNumeric: 'tabular-nums' }}>{pct}%</div>
+          <div style={{ fontSize: 22, fontWeight: 600, color: theme.accent, fontVariantNumeric: 'tabular-nums' }}>{loading ? '…' : `${pct}%`}</div>
           <div style={{ fontSize: 10.5, color: theme.textSubtle, textTransform: 'uppercase', letterSpacing: '0.08em' }}>complete</div>
         </div>
       </div>
-      {chart}
+      {loading
+        ? <div style={{ height: 260, display: 'grid', placeItems: 'center', color: theme.textSubtle, fontSize: 12 }}>Loading…</div>
+        : chart
+      }
       <div style={{ display: 'flex', gap: 16, fontSize: 11.5, color: theme.textMuted, marginTop: 10, fontFamily: 'ui-monospace, Menlo, monospace', flexWrap: 'wrap' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 14, height: 2, background: window.getScopeColor(theme.dark) }}></span> Total scope
