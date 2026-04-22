@@ -15,7 +15,7 @@ public class BurnupDbContext(DbContextOptions<BurnupDbContext> options) : DbCont
         mb.Entity<Card>(e =>
         {
             e.ToTable("cards");
-            // Index for card-number uniqueness checks within a project
+            e.HasKey(c => c.Uid);
             e.HasIndex(c => new { c.ProjectId, c.CardNumber });
         });
     }
