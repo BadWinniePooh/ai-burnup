@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: burnup
       POSTGRES_PASSWORD: burnup
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U burnup -d burnup"]
       interval: 5s
