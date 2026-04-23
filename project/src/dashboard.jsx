@@ -6,12 +6,10 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
   const [series, setSeries] = React.useState([]);
   const [burnupLoading, setBurnupLoading] = React.useState(true);
 
-  // Re-fetch burnup whenever project or the cards list changes.
-  // The cards dependency is shallow-keyed on count + last endDate so we avoid
-  // refetching on every keystroke (only when a card's completion status changes).
+  // Re-fetch burnup whenever project or cards change in a chart-relevant way.
   const burnupKey = React.useMemo(() => {
-    const doneCards = cards.filter(c => c.endDate);
-    return `${project.id}|${cards.length}|${doneCards.map(c => c.uid + c.endDate).join(',')}`;
+    const relevant = cards.map(c => `${c.uid}:${c.endDate || ''}:${c.estimationDays || 0}:${c.startedDate || ''}:${c.createdDate}`);
+    return `${project.id}|${relevant.join(',')}`;
   }, [project.id, cards]);
 
   React.useEffect(() => {
