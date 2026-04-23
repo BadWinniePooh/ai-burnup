@@ -6,14 +6,14 @@ namespace BurnupApi.Services;
 public class BurnupService
 {
     public List<BurnupPoint> BuildBurnup(
+        List<DailySnapshot> snapshots,
         IEnumerable<Card> cards,
         DateOnly projectStartDate,
         DateOnly? today = null)
     {
         var todayDate = today ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var cardList = cards.ToList();
-
-        if (cardList.Count == 0) return [];
+        var snapshotMap = snapshots.ToDictionary(s => s.Date);
 
         var days = Math.Max(1, todayDate.DayNumber - projectStartDate.DayNumber);
         var result = new List<BurnupPoint>(days + 1);
@@ -22,33 +22,27 @@ public class BurnupService
         {
             var d = projectStartDate.AddDays(i);
 
-            int scopeCount = 0, doneCount = 0;
-            double scopeDays = 0, doneDays = 0;
-
-            foreach (var c in cardList)
+            if (snapshotMap.TryGetValue(d, out var snap))
             {
-                if (c.CreatedDate <= d)
-                {
-                    scopeCount++;
-                    scopeDays += c.EstimationDays;
-                }
-
-                if (c.EndDate.HasValue && c.EndDate.Value <= d)
-                {
-                    doneCount++;
-                    var from = c.StartedDate ?? c.CreatedDate;
-                    var leadTime = Math.Max(0.5, c.EndDate.Value.DayNumber - from.DayNumber);
-                    doneDays += leadTime;
-                }
+                result.Add(new BurnupPoint(
+                    Date:       d.ToString("yyyy-MM-dd"),
+                    ScopeCount: snap.ScopeCount,
+                    DoneCount:  snap.DoneCount,
+                    ScopeDays:  snap.ScopeDays,
+                    DoneDays:   snap.DoneDays
+                ));
             }
-
-            result.Add(new BurnupPoint(
-                Date:       d.ToString("yyyy-MM-dd"),
-                ScopeCount: scopeCount,
-                DoneCount:  doneCount,
-                ScopeDays:  Math.Round(scopeDays, 1),
-                DoneDays:   Math.Round(doneDays, 1)
-            ));
+            else
+            {
+                var (sc, sd, dc, dd) = DomainService.ComputeDayTotals(d, cardList);
+                result.Add(new BurnupPoint(
+                    Date:       d.ToString("yyyy-MM-dd"),
+                    ScopeCount: sc,
+                    DoneCount:  dc,
+                    ScopeDays:  Math.Round(sd, 1),
+                    DoneDays:   Math.Round(dd, 1)
+                ));
+            }
         }
 
         return result;

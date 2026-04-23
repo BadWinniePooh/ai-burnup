@@ -1,4 +1,5 @@
 using BurnupApi.Models;
+using BurnupApi.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BurnupApi.Data;
@@ -81,4 +82,42 @@ public class DataStore(BurnupDbContext db)
 
     public Task<bool> CardNumberConflictsAsync(string projectId, string excludeUid, int cardNumber) =>
         db.Cards.AnyAsync(c => c.ProjectId == projectId && c.Uid != excludeUid && c.CardNumber == cardNumber);
+
+    // ── Daily snapshots ───────────────────────────────────────────
+
+    public Task<List<DailySnapshot>> GetSnapshotsAsync(string projectId) =>
+        db.Snapshots.Where(s => s.ProjectId == projectId).OrderBy(s => s.Date).ToListAsync();
+
+    public async Task EnsurePastSnapshotsAsync(string projectId, List<Card> cards, DateOnly from, DateOnly through)
+    {
+        if (through < from) return;
+
+        var existing = (await db.Snapshots
+            .Where(s => s.ProjectId == projectId && s.Date >= from && s.Date <= through)
+            .Select(s => s.Date)
+            .ToListAsync())
+            .ToHashSet();
+
+        var toAdd = new List<DailySnapshot>();
+        for (var d = from; d <= through; d = d.AddDays(1))
+        {
+            if (existing.Contains(d)) continue;
+            var (sc, sd, dc, dd) = DomainService.ComputeDayTotals(d, cards);
+            toAdd.Add(new DailySnapshot
+            {
+                ProjectId  = projectId,
+                Date       = d,
+                ScopeCount = sc,
+                DoneCount  = dc,
+                ScopeDays  = Math.Round(sd, 1),
+                DoneDays   = Math.Round(dd, 1),
+            });
+        }
+
+        if (toAdd.Count > 0)
+        {
+            db.Snapshots.AddRange(toAdd);
+            await db.SaveChangesAsync();
+        }
+    }
 }

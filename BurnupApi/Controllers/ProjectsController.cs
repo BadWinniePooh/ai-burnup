@@ -78,7 +78,7 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
         var project = await store.GetProjectAsync(id);
         if (project is null) return NotFound();
 
-        DateOnly? todayDate = null;
+        var todayDate = DateOnly.FromDateTime(DateTime.UtcNow);
         if (today is not null)
         {
             if (!DateOnly.TryParse(today, out var td))
@@ -86,8 +86,10 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
             todayDate = td;
         }
 
-        var cards  = await store.GetCardsAsync(id);
-        var series = burnup.BuildBurnup(cards, project.StartDate, todayDate);
+        var cards = await store.GetCardsAsync(id);
+        await store.EnsurePastSnapshotsAsync(id, cards, project.StartDate, todayDate.AddDays(-1));
+        var snapshots = await store.GetSnapshotsAsync(id);
+        var series = burnup.BuildBurnup(snapshots, cards, project.StartDate, todayDate);
         return Ok(series);
     }
 }
