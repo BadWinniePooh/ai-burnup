@@ -21,6 +21,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<BurnupDbContext>(o => o.UseNpgsql(connectionString));
 builder.Services.AddScoped<DataStore>();
 builder.Services.AddSingleton<BurnupService>();
+builder.Services.AddHostedService<SnapshotWorker>();
 
 builder.Services.AddCors(o =>
     o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));

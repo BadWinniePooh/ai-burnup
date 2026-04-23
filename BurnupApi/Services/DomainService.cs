@@ -24,16 +24,22 @@ public static class DomainService
         double scopeDays = 0, doneDays = 0;
         foreach (var c in cards)
         {
-            if (c.CreatedDate <= date)
-            {
-                scopeCount++;
-                scopeDays += c.EstimationDays;
-            }
+            if (c.CreatedDate > date) continue;
+            scopeCount++;
+
             if (c.EndDate.HasValue && c.EndDate.Value <= date)
             {
+                // Finished: both scope and done reflect actual workday lead time
+                var from   = c.StartedDate ?? c.CreatedDate;
+                var actual = Math.Max(0.5, WorkdayCalculator.CountWorkdays(from, c.EndDate.Value));
+                scopeDays += actual;
                 doneCount++;
-                var from = c.StartedDate ?? c.CreatedDate;
-                doneDays += Math.Max(0.5, WorkdayCalculator.CountWorkdays(from, c.EndDate.Value));
+                doneDays  += actual;
+            }
+            else
+            {
+                // Not yet finished: scope uses the original estimate
+                scopeDays += c.EstimationDays;
             }
         }
         return (scopeCount, scopeDays, doneCount, doneDays);
