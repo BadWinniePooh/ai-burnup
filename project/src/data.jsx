@@ -76,14 +76,15 @@ function _isWorkday(dateStr) {
   return dow !== 0 && dow !== 6 && !_holidays(Number(dateStr.slice(0, 4))).has(dateStr);
 }
 
-// Count working days in (fromStr, toStr] — exclusive start, inclusive end.
+// Count working days in [fromStr, toStr] — both endpoints inclusive.
+// A card started and finished on the same workday counts as 1.
 // Both arguments are 'yyyy-MM-dd' strings.
 function countWorkdays(fromStr, toStr) {
   const from = new Date(fromStr + 'T00:00:00');
   const to   = new Date(toStr   + 'T00:00:00');
-  if (to <= from) return 0;
+  if (to < from) return 0;
   let count = 0;
-  const cur = new Date(from.getTime() + 86400000);
+  const cur = new Date(from.getTime());
   while (cur <= to) {
     const s = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
     if (_isWorkday(s)) count++;

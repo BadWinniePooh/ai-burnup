@@ -59,14 +59,15 @@ public static class WorkdayCalculator
         && !HolidaysForYear(date.Year).Contains(date);
 
     /// <summary>
-    /// Number of working days in (from, to] — exclusive start, inclusive end.
-    /// Returns 0 when to &lt;= from.
+    /// Number of working days in [from, to] — both endpoints inclusive.
+    /// A card started and finished on the same workday counts as 1.
+    /// Returns 0 when to &lt; from.
     /// </summary>
     public static double CountWorkdays(DateOnly from, DateOnly to)
     {
-        if (to <= from) return 0;
+        if (to < from) return 0;
         int count = 0;
-        for (var d = from.AddDays(1); d <= to; d = d.AddDays(1))
+        for (var d = from; d <= to; d = d.AddDays(1))
             if (IsWorkday(d)) count++;
         return count;
     }
