@@ -90,7 +90,7 @@ function Input({ theme, style, ...rest }) {
 function Select({ theme, children, style, ...rest }) {
   const arrowColor = theme.dark ? '%23a69f91' : '%234a463e';
   return <select {...rest} style={{
-    background: theme.surface,
+    backgroundColor: theme.surface,
     border: `1px solid ${theme.border}`,
     borderRadius: 7,
     padding: '8px 10px',
