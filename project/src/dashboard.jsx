@@ -30,17 +30,47 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
   const pctDays  = latest.scopeDays  ? Math.round((latest.doneDays  / latest.scopeDays)  * 100) : 0;
   const remaining = latest.scopeCount - latest.doneCount;
 
-  // Velocity over last 14 days
-  const last14 = series.slice(-15);
-  const doneInWindow     = last14.length > 1 ? last14[last14.length - 1].doneCount - last14[0].doneCount : 0;
-  const daysDoneInWindow = last14.length > 1 ? Math.round(last14[last14.length - 1].doneDays - last14[0].doneDays) : 0;
+  // Linear regression — same algorithm as the chart trendlines, so numbers are consistent.
+  // Each index step = 1 calendar day (series has one point per day after gap-fill).
+  function linreg(data, key) {
+    const n = data.length;
+    if (n < 2) return { m: 0, b: data[0] ? data[0][key] : 0 };
+    let sx = 0, sy = 0, sxy = 0, sxx = 0;
+    for (let i = 0; i < n; i++) {
+      const y = data[i][key];
+      sx += i; sy += y; sxy += i * y; sxx += i * i;
+    }
+    const denom = n * sxx - sx * sx;
+    if (denom === 0) return { m: 0, b: sy / n };
+    const m = (n * sxy - sx * sy) / denom;
+    const b = (sy - m * sx) / n;
+    return { m, b };
+  }
 
-  // Projected completion via linear extrapolation from last-14d velocity
+  const scopeFit = linreg(countSeries, 'scope');
+  const doneFit  = linreg(countSeries, 'done');
+  const doneRatePerDay  = doneFit.m;   // cards/day — matches the chart done trendline
+  const scopeRatePerDay = scopeFit.m;  // cards/day — matches the chart scope trendline
+
+  // Also compute 14-day window velocity for the sub-label comparison
+  const last14 = series.slice(-15);
+  const doneInWindow = last14.length > 1 ? last14[last14.length - 1].doneCount - last14[0].doneCount : 0;
+  const windowDays   = last14.length > 1 ? last14.length - 1 : 14;
+
+  // Projected completion: solve done_now + doneRate*t = scope_now + scopeRate*t
+  // t = remaining / (doneRate - scopeRate)
+  // Only valid when done is growing faster than scope.
   let projection = null;
-  if (doneInWindow > 0 && remaining > 0) {
-    const daysToDone = Math.round((remaining / doneInWindow) * 14);
-    const projDate = window.addDays(new Date(latest.date), daysToDone);
-    projection = window.dateKey(projDate);
+  let gapWidening = false;
+  if (remaining > 0) {
+    const netRate = doneRatePerDay - scopeRatePerDay;
+    if (netRate > 0.001) {
+      const daysToDone = Math.round(remaining / netRate);
+      const projDate = window.addDays(new Date(latest.date), daysToDone);
+      projection = window.dateKey(projDate);
+    } else {
+      gapWidening = true; // scope growing at least as fast as done — gap won't close
+    }
   }
 
   // Breakdown by type and scope (from local card state — always up to date)
@@ -69,10 +99,10 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
 
       {/* Stat grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-        <StatCard theme={theme} label="Total cards"   value={latest.scopeCount}           sub={`${remaining} remaining`} />
-        <StatCard theme={theme} label="Completed"     value={latest.doneCount}             sub={`${pctCards}% of scope`} accent />
-        <StatCard theme={theme} label="Scope · days"  value={Math.round(latest.scopeDays)} sub={`${Math.round(latest.doneDays)} done · ${pctDays}%`} />
-        <StatCard theme={theme} label="Velocity"      value={doneInWindow}                 sub={`${daysDoneInWindow}d over last 14d`} />
+        <StatCard theme={theme} label="Total cards"   value={latest.scopeCount}                        sub={`${remaining} remaining`} />
+        <StatCard theme={theme} label="Completed"     value={latest.doneCount}                         sub={`${pctCards}% of scope`} accent />
+        <StatCard theme={theme} label="Scope · days"  value={Math.round(latest.scopeDays)}             sub={`${Math.round(latest.doneDays)} done · ${pctDays}%`} />
+        <StatCard theme={theme} label="Velocity"      value={`${doneRatePerDay.toFixed(2)}/d`}         sub={`scope +${scopeRatePerDay.toFixed(2)}/d · ${doneInWindow} done last ${windowDays}d`} />
       </div>
 
       {/* Charts row */}
@@ -99,7 +129,8 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
         <BreakdownCard theme={theme} title="By type"  items={byType}  meta={window.TYPE_META} mode="type" />
         <BreakdownCard theme={theme} title="By scope" items={byScope} mode="scope" />
-        <ProjectionCard theme={theme} projection={projection} remaining={remaining} velocity={doneInWindow} />
+        <ProjectionCard theme={theme} projection={projection} remaining={remaining}
+          doneRate={doneRatePerDay} scopeRate={scopeRatePerDay} gapWidening={gapWidening} />
       </div>
     </div>
   );
@@ -173,22 +204,32 @@ function BreakdownCard({ theme, title, items, meta, mode }) {
   );
 }
 
-function ProjectionCard({ theme, projection, remaining, velocity }) {
+function ProjectionCard({ theme, projection, remaining, doneRate, scopeRate, gapWidening }) {
   return (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 18 }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Projection</div>
-      {projection ? (
+      {remaining === 0 ? (
+        <div style={{ fontSize: 13, color: theme.success }}>Project complete 🎯</div>
+      ) : gapWidening ? (
+        <>
+          <div style={{ fontSize: 13, color: theme.danger, fontWeight: 500, marginBottom: 8 }}>Gap widening ↗</div>
+          <div style={{ fontSize: 12, color: theme.textMuted, lineHeight: 1.6 }}>
+            Scope is growing at <span style={{ color: theme.text, fontFamily: 'ui-monospace, Menlo, monospace' }}>{scopeRate.toFixed(2)}/d</span> while
+            done grows at only <span style={{ color: theme.text, fontFamily: 'ui-monospace, Menlo, monospace' }}>{doneRate.toFixed(2)}/d</span>.
+            The gap won't close at current trends.
+          </div>
+        </>
+      ) : projection ? (
         <>
           <div style={{ fontSize: 11, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Est. completion</div>
           <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.01em', fontFamily: 'ui-monospace, Menlo, monospace', marginBottom: 10 }}>{projection}</div>
           <div style={{ fontSize: 12, color: theme.textMuted, lineHeight: 1.5 }}>
-            At current velocity ({velocity} cards / 14d), {remaining} remaining cards will finish around this date.
+            Net closure rate: <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', color: theme.text }}>{(doneRate - scopeRate).toFixed(2)}/d</span> ({doneRate.toFixed(2)} done − {scopeRate.toFixed(2)} scope growth).
+            {remaining} cards remaining.
           </div>
         </>
       ) : (
-        <div style={{ fontSize: 13, color: theme.textMuted }}>
-          {remaining === 0 ? 'Project complete 🎯' : 'Not enough velocity data yet.'}
-        </div>
+        <div style={{ fontSize: 13, color: theme.textMuted }}>Not enough data yet.</div>
       )}
     </div>
   );
