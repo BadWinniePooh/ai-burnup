@@ -146,7 +146,8 @@ const TYPE_META = {
 
 function TypeGlyph({ type, size = 16, theme }) {
   const m = TYPE_META[type] || TYPE_META.feature;
-  const color = `oklch(0.62 0.13 ${m.hue})`;
+  const hue = theme?.typeHues?.[type] ?? m.hue;
+  const color = `oklch(0.62 0.13 ${hue})`;
   const bg = `color-mix(in oklch, ${color} 18%, transparent)`;
   return <span style={{
     display: 'inline-flex',

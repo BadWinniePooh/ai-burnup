@@ -26,6 +26,8 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
   const [showImport,   setShowImport]   = React.useState(false);
   const [mobilePanel,  setMobilePanel]  = React.useState('list'); // 'list' | 'editor'
   const [isMobile,     setIsMobile]     = React.useState(() => window.innerWidth < 700);
+  const [sortBy,       setSortBy]       = React.useState('id');
+  const [sortDir,      setSortDir]      = React.useState('asc');
 
   React.useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 700);
@@ -44,6 +46,20 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
       if (!(`${displayId} ${c.title}`).toLowerCase().includes(query.toLowerCase())) return false;
     }
     return true;
+  });
+
+  const sorted = [...visible].sort((a, b) => {
+    let va, vb;
+    if      (sortBy === 'id')         { va = a.cardNumber;     vb = b.cardNumber; }
+    else if (sortBy === 'created')    { va = a.createdDate;    vb = b.createdDate; }
+    else if (sortBy === 'started')    { va = a.startedDate;    vb = b.startedDate; }
+    else if (sortBy === 'ended')      { va = a.endDate;        vb = b.endDate; }
+    else                              { va = a.estimationDays; vb = b.estimationDays; }
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return sortDir === 'asc' ? cmp : -cmp;
   });
 
   React.useEffect(() => {
@@ -129,6 +145,16 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
             options={[['all', 'All'], ...window.CARD_TYPES.map(tp => [tp, window.TYPE_META[tp].label])]} />
           <FilterPill theme={theme} label="Scope" value={scopeFilter} onChange={setScopeFilter}
             options={[['all', 'All'], ...window.SCOPES.map(s => [s, s.toUpperCase()])]} />
+          <FilterPill theme={theme} label="Sort" value={sortBy} onChange={setSortBy}
+            options={[['id','ID'], ['created','Created'], ['started','Started'], ['ended','Ended'], ['estimation','Estimation']]} />
+          <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            padding: '4px 8px', border: `1px solid ${theme.border}`, borderRadius: 6,
+            fontSize: 12, background: theme.surface, color: theme.text,
+            cursor: 'pointer', fontFamily: 'ui-monospace, Menlo, monospace', minWidth: 28,
+          }} title={sortDir === 'asc' ? 'Ascending' : 'Descending'}>
+            {sortDir === 'asc' ? '↑' : '↓'}
+          </button>
         </div>
       </div>
 
@@ -137,7 +163,7 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
         {visible.length === 0 && (
           <div style={{ padding: 32, color: theme.textMuted, fontSize: 13, textAlign: 'center' }}>No cards match filters.</div>
         )}
-        {visible.map(c => (
+        {sorted.map(c => (
           <CardRow key={c.uid} card={c} project={project} theme={theme}
             selected={c.uid === selectedUid}
             onClick={() => { setSelectedUid(c.uid); if (isMobile) setMobilePanel('editor'); }} />

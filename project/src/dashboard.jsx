@@ -203,7 +203,9 @@ function BreakdownCard({ theme, title, items, meta, mode }) {
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>{title}</div>
       {entries.map(([k, v]) => {
         const pct = Math.round((v / total) * 100);
-        const hue = mode === 'type' ? (meta[k]?.hue ?? 258) : ({ mvp: 258, mlp: 178, other: 62 }[k] ?? 258);
+        const hue = mode === 'type'
+          ? (theme.typeHues?.[k]  ?? meta[k]?.hue ?? 258)
+          : (theme.scopeHues?.[k] ?? { mvp: 258, mlp: 178, other: 62 }[k] ?? 258);
         const color = `oklch(0.62 0.13 ${hue})`;
         return (
           <div key={k} style={{ marginBottom: 10 }}>

@@ -1,14 +1,27 @@
 // App shell: project switcher header + nav + Dashboard/Cards views + Tweaks.
 
+const DEFAULT_TYPE_HUES  = { feature: 258, bug: 25, 'no-code': 155, tiny: 62 };
+const DEFAULT_SCOPE_HUES = { mvp: 258, mlp: 178, other: 62 };
+
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "dark": false,
   "accentHue": 258,
   "chartStyle": "area",
-  "density": "comfortable"
+  "density": "comfortable",
+  "typeHues":  { "feature": 258, "bug": 25, "no-code": 155, "tiny": 62 },
+  "scopeHues": { "mvp": 258, "mlp": 178, "other": 62 }
 }/*EDITMODE-END*/;
 
 function App() {
-  const [tweaks, setTweaks] = React.useState(TWEAK_DEFAULTS);
+  const [tweaks, setTweaks] = React.useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('burnup.tweaks') || '{}');
+      return { ...TWEAK_DEFAULTS, ...saved,
+        typeHues:  { ...DEFAULT_TYPE_HUES,  ...(saved.typeHues  || {}) },
+        scopeHues: { ...DEFAULT_SCOPE_HUES, ...(saved.scopeHues || {}) },
+      };
+    } catch { return TWEAK_DEFAULTS; }
+  });
   const [editMode, setEditMode] = React.useState(false);
   const [projectId, setProjectId] = React.useState(() => localStorage.getItem('burnup.projectId') || 'aurora');
   const [view, setView] = React.useState(() => localStorage.getItem('burnup.view') || 'dashboard');
@@ -39,6 +52,7 @@ function App() {
 
   React.useEffect(() => { localStorage.setItem('burnup.projectId', projectId); }, [projectId]);
   React.useEffect(() => { localStorage.setItem('burnup.view', view); }, [view]);
+  React.useEffect(() => { localStorage.setItem('burnup.tweaks', JSON.stringify(tweaks)); }, [tweaks]);
 
   // Edit-mode wiring (design canvas integration)
   React.useEffect(() => {
@@ -62,21 +76,22 @@ function App() {
 
   const theme = React.useMemo(() => {
     const accent = `oklch(0.62 0.15 ${tweaks.accentHue})`;
+    const colors = { typeHues: tweaks.typeHues, scopeHues: tweaks.scopeHues };
     if (tweaks.dark) return {
       bg: '#0e0d0c', surface: '#16140f', surfaceElev: '#1c1915',
       border: 'rgba(255,255,255,0.08)', borderStrong: 'rgba(255,255,255,0.14)',
       text: '#f2ece1', textMuted: 'rgba(242,236,225,0.58)', textSubtle: 'rgba(242,236,225,0.38)',
       accent, accentSoft: `color-mix(in oklch, ${accent} 18%, transparent)`,
-      danger: 'oklch(0.68 0.18 25)', success: 'oklch(0.72 0.14 155)', dark: true,
+      danger: 'oklch(0.68 0.18 25)', success: 'oklch(0.72 0.14 155)', dark: true, ...colors,
     };
     return {
       bg: '#faf8f4', surface: '#ffffff', surfaceElev: '#ffffff',
       border: 'rgba(30,25,20,0.08)', borderStrong: 'rgba(30,25,20,0.16)',
       text: '#17150f', textMuted: 'rgba(23,21,15,0.58)', textSubtle: 'rgba(23,21,15,0.38)',
       accent, accentSoft: `color-mix(in oklch, ${accent} 14%, transparent)`,
-      danger: 'oklch(0.55 0.18 25)', success: 'oklch(0.58 0.14 155)', dark: false,
+      danger: 'oklch(0.55 0.18 25)', success: 'oklch(0.58 0.14 155)', dark: false, ...colors,
     };
-  }, [tweaks.dark, tweaks.accentHue]);
+  }, [tweaks]);
 
   // ── Project CRUD ─────────────────────────────────────────────────
 
@@ -196,7 +211,8 @@ function App() {
 }
 
 function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak, onNewProject, onEditProject }) {
-  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [pickerOpen,   setPickerOpen]   = React.useState(false);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
   return (
     <header style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -309,12 +325,28 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
             : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.3" /><path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.8 2.8l1 1M10.2 10.2l1 1M2.8 11.2l1-1M10.2 3.8l1-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
           }
         </button>
+        <button onClick={() => setSettingsOpen(v => !v)} title="Appearance" style={{
+          width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
+          background: settingsOpen ? theme.accentSoft : theme.surface,
+          color: settingsOpen ? theme.accent : theme.textMuted,
+          cursor: 'pointer', display: 'grid', placeItems: 'center',
+        }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M1 4h12M1 10h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            <circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
+            <circle cx="10" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
+          </svg>
+        </button>
         <div style={{
           width: 26, height: 26, borderRadius: '50%',
           background: `linear-gradient(135deg, ${theme.accent}, oklch(0.62 0.15 ${((tweaks.accentHue + 60) % 360)}))`,
           display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 600, color: '#fff',
         }}>KR</div>
       </div>
+      {settingsOpen && (
+        <SettingsModal theme={theme} tweaks={tweaks} updateTweak={updateTweak}
+          onClose={() => setSettingsOpen(false)} />
+      )}
     </header>
   );
 }
@@ -506,6 +538,84 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
               {saving ? 'Saving…' : isNew ? 'Create' : 'Save changes'}
             </Button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const SETTINGS_HUES = [258, 218, 178, 155, 62, 40, 25, 320];
+
+function SettingsModal({ theme, tweaks, updateTweak, onClose }) {
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const typeEntries  = [['feature', 'Feature'], ['bug', 'Bug'], ['no-code', 'No-code'], ['tiny', 'Tiny']];
+  const scopeEntries = [['mvp', 'MVP'], ['mlp', 'MLP'], ['other', 'Other']];
+
+  function HueRow({ label, currentHue, onChange }) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <div style={{ width: 64, fontSize: 12, color: theme.text, flexShrink: 0 }}>{label}</div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {SETTINGS_HUES.map(h => (
+            <button key={h} onClick={() => onChange(h)} style={{
+              width: 20, height: 20, borderRadius: '50%', padding: 0, cursor: 'pointer',
+              background: `oklch(0.62 0.13 ${h})`,
+              border: currentHue === h ? `2px solid ${theme.text}` : '2px solid transparent',
+              outline: 'none',
+            }} />
+          ))}
+        </div>
+        <div style={{ width: 20, height: 20, borderRadius: 4, flexShrink: 0, background: `oklch(0.62 0.13 ${currentHue})` }} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
+      <div style={{
+        position: 'relative', zIndex: 1, fontFamily: 'Inter, system-ui, sans-serif',
+        background: theme.surface, border: `1px solid ${theme.borderStrong}`,
+        borderRadius: 12, width: 420, padding: 24, color: theme.text,
+        boxShadow: theme.dark ? '0 24px 80px rgba(0,0,0,0.6)' : '0 24px 80px rgba(0,0,0,0.14)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>Appearance</span>
+          <button onClick={onClose} style={{
+            border: 'none', background: 'transparent', color: theme.textMuted,
+            cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4, borderRadius: 4,
+          }}>✕</button>
+        </div>
+
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+          Card type colors
+        </div>
+        {typeEntries.map(([k, label]) => (
+          <HueRow key={k} label={label}
+            currentHue={tweaks.typeHues?.[k] ?? DEFAULT_TYPE_HUES[k]}
+            onChange={h => updateTweak({ typeHues: { ...tweaks.typeHues, [k]: h } })} />
+        ))}
+
+        <div style={{ borderTop: `1px solid ${theme.border}`, margin: '16px 0 12px' }} />
+
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+          Scope colors
+        </div>
+        {scopeEntries.map(([k, label]) => (
+          <HueRow key={k} label={label}
+            currentHue={tweaks.scopeHues?.[k] ?? DEFAULT_SCOPE_HUES[k]}
+            onChange={h => updateTweak({ scopeHues: { ...tweaks.scopeHues, [k]: h } })} />
+        ))}
+
+        <div style={{ borderTop: `1px solid ${theme.border}`, marginTop: 16, paddingTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={() => updateTweak({ typeHues: DEFAULT_TYPE_HUES, scopeHues: DEFAULT_SCOPE_HUES })} style={{
+            fontSize: 11.5, color: theme.textMuted, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
+          }}>Reset to defaults</button>
         </div>
       </div>
     </div>
