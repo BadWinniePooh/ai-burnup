@@ -260,11 +260,17 @@ function CardEditForm({ card, project, allCards, theme, onUpdate, onApiSave, onD
     onApiSave(next);
   };
 
-  const status     = window.StatusDot({ card: local, theme });
-  const canStart   = !local.startedDate;
+  const status      = window.StatusDot({ card: local, theme });
+  const canStart    = !local.startedDate;
   const canComplete = local.startedDate && !local.endDate;
-  const displayId  = window.cardDisplayId(local, project);
-  const collision  = allCards.some(c => c.uid !== local.uid && c.projectId === local.projectId && c.cardNumber === local.cardNumber);
+  const displayId   = window.cardDisplayId(local, project);
+  const collision   = allCards.some(c => c.uid !== local.uid && c.projectId === local.projectId && c.cardNumber === local.cardNumber);
+
+  // When a card is done, actual lead time replaces the estimation in the charts.
+  const leadTimeDays = local.endDate
+    ? Math.max(0.5, (new Date(local.endDate) - new Date(local.startedDate || local.createdDate)) / 86400000)
+    : null;
+  const effectiveDays = leadTimeDays ?? (local.estimationDays || 0);
 
   return (
     <div style={{ maxWidth: 680, margin: '0 auto', padding: '28px 32px 48px' }}>
@@ -325,7 +331,9 @@ function CardEditForm({ card, project, allCards, theme, onUpdate, onApiSave, onD
             </window.Select>
           </div>
           <div style={{ fontSize: 11, color: theme.textSubtle, marginTop: 4, fontFamily: 'ui-monospace, Menlo, monospace' }}>
-            ≈ {(local.estimationDays || 0).toFixed(1)} days for charts
+            {leadTimeDays !== null
+              ? <><span style={{ color: theme.success }}>≈ {leadTimeDays.toFixed(1)} days for charts</span> · actual lead time</>
+              : <>≈ {(local.estimationDays || 0).toFixed(1)} days for charts</>}
           </div>
         </FormField>
 
@@ -376,8 +384,10 @@ function CardEditForm({ card, project, allCards, theme, onUpdate, onApiSave, onD
       </div>
 
       <div style={{ marginTop: 32, padding: '14px 16px', background: theme.dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px dashed ${theme.border}`, borderRadius: 8, fontSize: 12, color: theme.textMuted, lineHeight: 1.55 }}>
-        <strong style={{ color: theme.text, fontWeight: 600 }}>How this rolls up:</strong> The charts treat this card as {(local.estimationDays || 0).toFixed(1)} day{local.estimationDays === 1 ? '' : 's'} of effort. It'll appear in total scope from <code style={{ fontFamily: 'ui-monospace, Menlo, monospace', color: theme.text }}>{local.createdDate}</code>
-        {local.endDate ? <> and contribute to <em>completed</em> from <code style={{ fontFamily: 'ui-monospace, Menlo, monospace', color: theme.text }}>{local.endDate}</code>.</> : <>, not yet contributing to <em>completed</em>.</>}
+        <strong style={{ color: theme.text, fontWeight: 600 }}>How this rolls up:</strong>{' '}
+        {leadTimeDays !== null
+          ? <>The charts use <span style={{ color: theme.success, fontWeight: 500 }}>{leadTimeDays.toFixed(1)} days</span> of actual lead time (<code style={{ fontFamily: 'ui-monospace, Menlo, monospace', color: theme.text }}>{local.startedDate || local.createdDate}</code> → <code style={{ fontFamily: 'ui-monospace, Menlo, monospace', color: theme.text }}>{local.endDate}</code>), overriding the {(local.estimationDays || 0).toFixed(1)}-day estimate.</>
+          : <>The charts treat this card as {(local.estimationDays || 0).toFixed(1)} day{local.estimationDays === 1 ? '' : 's'} of effort. It'll appear in total scope from <code style={{ fontFamily: 'ui-monospace, Menlo, monospace', color: theme.text }}>{local.createdDate}</code>{local.endDate ? <> and contribute to <em>completed</em> from <code style={{ fontFamily: 'ui-monospace, Menlo, monospace', color: theme.text }}>{local.endDate}</code>.</> : <>, not yet contributing to <em>completed</em>.</>}</>}
       </div>
     </div>
   );
