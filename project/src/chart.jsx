@@ -54,6 +54,7 @@ function BurnupChart({ data, scopeLabel = 'Scope', doneLabel = 'Completed', acce
 
   const maxY = Math.max(
     ...data.map(d => d.scope),
+    ...data.map(d => d.done),
     scopeTrendEnd, scopeTrendStart, doneTrendEnd, doneTrendStart
   ) || 1;
   const niceMax = Math.ceil(maxY * 1.1);
