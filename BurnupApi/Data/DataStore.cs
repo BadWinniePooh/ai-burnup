@@ -35,6 +35,8 @@ public class DataStore(BurnupDbContext db)
     {
         var project = await db.Projects.FindAsync(id);
         if (project is null) return false;
+        var cards = await db.Cards.Where(c => c.ProjectId == id).ToListAsync();
+        db.Cards.RemoveRange(cards);
         db.Projects.Remove(project);
         await db.SaveChangesAsync();
         return true;

@@ -36,7 +36,9 @@ public class BurnupService
                 if (c.EndDate.HasValue && c.EndDate.Value <= d)
                 {
                     doneCount++;
-                    doneDays += c.EstimationDays;
+                    var from = c.StartedDate ?? c.CreatedDate;
+                    var leadTime = Math.Max(0.5, c.EndDate.Value.DayNumber - from.DayNumber);
+                    doneDays += leadTime;
                 }
             }
 

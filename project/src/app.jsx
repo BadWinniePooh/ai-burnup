@@ -18,16 +18,14 @@ function App() {
   const [loading, setLoading] = React.useState(true);
   const [apiError, setApiError] = React.useState(null);
   const [selectedCardUid, setSelectedCardUid] = React.useState(null);
+  const [modalProject, setModalProject] = React.useState(null); // null | { mode:'new' } | { mode:'edit', project }
 
   // Load all projects once on mount
   React.useEffect(() => {
     window.api.getProjects()
       .then(ps => {
         setProjects(ps);
-        // Fall back to first project if stored ID no longer exists
-        if (ps.length > 0 && !ps.find(p => p.id === projectId)) {
-          setProjectId(ps[0].id);
-        }
+        if (ps.length > 0 && !ps.find(p => p.id === projectId)) setProjectId(ps[0].id);
       })
       .catch(err => setApiError(err.message))
       .finally(() => setLoading(false));
@@ -80,7 +78,29 @@ function App() {
     };
   }, [tweaks.dark, tweaks.accentHue]);
 
-  // ── Loading / error screens ────────────────────────────────────
+  // ── Project CRUD ─────────────────────────────────────────────────
+
+  const handleSaveProject = async (data) => {
+    if (modalProject.mode === 'new') {
+      const created = await window.api.createProject(data);
+      setProjects(ps => [...ps, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setProjectId(created.id);
+    } else {
+      const updated = await window.api.updateProject(modalProject.project.id, data);
+      setProjects(ps => ps.map(p => p.id === updated.id ? updated : p));
+    }
+    setModalProject(null);
+  };
+
+  const handleDeleteProject = async (id) => {
+    await window.api.deleteProject(id);
+    const remaining = projects.filter(p => p.id !== id);
+    setProjects(remaining);
+    if (projectId === id) setProjectId(remaining[0]?.id ?? null);
+    setModalProject(null);
+  };
+
+  // ── Loading / error screens ───────────────────────────────────
 
   if (loading) return (
     <div style={{
@@ -97,12 +117,8 @@ function App() {
       fontFamily: 'Inter, system-ui, sans-serif', padding: 32, textAlign: 'center',
     }}>
       <div>
-        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8, color: '#17150f' }}>
-          Cannot reach the API
-        </div>
-        <div style={{ fontSize: 13, color: 'rgba(23,21,15,0.55)', marginBottom: 20, maxWidth: 400 }}>
-          {apiError}
-        </div>
+        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8, color: '#17150f' }}>Cannot reach the API</div>
+        <div style={{ fontSize: 13, color: 'rgba(23,21,15,0.55)', marginBottom: 20, maxWidth: 400 }}>{apiError}</div>
         <div style={{
           fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace',
           background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)',
@@ -115,69 +131,82 @@ function App() {
   );
 
   const project = projects.find(p => p.id === projectId) || projects[0];
+
   if (!project) return (
-    <div style={{ height: '100vh', background: '#faf8f4', display: 'grid', placeItems: 'center', fontFamily: 'Inter, system-ui, sans-serif', color: '#999', fontSize: 13 }}>
-      No projects found.
+    <div style={{
+      height: '100vh', background: '#faf8f4', display: 'grid', placeItems: 'center',
+      fontFamily: 'Inter, system-ui, sans-serif', textAlign: 'center',
+    }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: '#17150f' }}>No projects yet</div>
+        <div style={{ fontSize: 13, color: 'rgba(23,21,15,0.45)', marginBottom: 20 }}>
+          Create your first project to get started.
+        </div>
+        <button onClick={() => setModalProject({ mode: 'new' })} style={{
+          padding: '8px 16px', fontSize: 13, fontWeight: 500, border: 'none', borderRadius: 7,
+          background: '#17150f', color: '#faf8f4', cursor: 'pointer',
+          fontFamily: 'Inter, system-ui, sans-serif',
+        }}>+ New project</button>
+      </div>
+      {modalProject && (
+        <ProjectModal theme={{ bg:'#faf8f4', surface:'#fff', surfaceElev:'#fff',
+          border:'rgba(30,25,20,0.08)', borderStrong:'rgba(30,25,20,0.16)',
+          text:'#17150f', textMuted:'rgba(23,21,15,0.58)', textSubtle:'rgba(23,21,15,0.38)',
+          accent:'oklch(0.62 0.15 258)', accentSoft:'color-mix(in oklch,oklch(0.62 0.15 258) 14%,transparent)',
+          danger:'oklch(0.55 0.18 25)', dark: false }}
+          initialProject={{}} onSave={handleSaveProject} onDelete={handleDeleteProject}
+          onClose={() => setModalProject(null)} />
+      )}
     </div>
   );
 
   return (
     <div style={{
-      height: '100vh',
-      background: theme.bg,
-      color: theme.text,
+      height: '100vh', background: theme.bg, color: theme.text,
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-      letterSpacing: '-0.005em',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden', letterSpacing: '-0.005em',
     }}>
       <Header theme={theme} project={project} projects={projects}
         onProjectChange={setProjectId} view={view} onViewChange={setView}
-        tweaks={tweaks} updateTweak={updateTweak} />
+        tweaks={tweaks} updateTweak={updateTweak}
+        onNewProject={() => setModalProject({ mode: 'new' })}
+        onEditProject={(p) => setModalProject({ mode: 'edit', project: p })}
+      />
 
       <div style={{ flex: 1, minHeight: 0, overflowY: view === 'dashboard' ? 'auto' : 'hidden' }}>
         {view === 'dashboard' && (
           <window.Dashboard project={project} cards={cards} theme={theme} chartStyle={tweaks.chartStyle} />
         )}
         {view === 'cards' && (
-          <window.CardsView
-            project={project}
-            cards={cards}
-            setCards={setCards}
-            theme={theme}
-            selectedUid={selectedCardUid}
-            setSelectedUid={setSelectedCardUid}
-          />
+          <window.CardsView project={project} cards={cards} setCards={setCards} theme={theme}
+            selectedUid={selectedCardUid} setSelectedUid={setSelectedCardUid} />
         )}
       </div>
 
       {editMode && <TweaksPanel theme={theme} tweaks={tweaks} updateTweak={updateTweak} />}
+
+      {modalProject && (
+        <ProjectModal theme={theme}
+          initialProject={modalProject.mode === 'edit' ? modalProject.project : {}}
+          onSave={handleSaveProject} onDelete={handleDeleteProject}
+          onClose={() => setModalProject(null)} />
+      )}
     </div>
   );
 }
 
-function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak }) {
+function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak, onNewProject, onEditProject }) {
   const [pickerOpen, setPickerOpen] = React.useState(false);
   return (
     <header style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '0 20px',
-      height: 54,
-      borderBottom: `1px solid ${theme.border}`,
-      background: theme.surface,
-      flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '0 20px', height: 54,
+      borderBottom: `1px solid ${theme.border}`, background: theme.surface, flexShrink: 0,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
         {/* Brand */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 22, height: 22, borderRadius: 5,
-            background: theme.text,
-            display: 'grid', placeItems: 'center',
-          }}>
+          <div style={{ width: 22, height: 22, borderRadius: 5, background: theme.text, display: 'grid', placeItems: 'center' }}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M1 10 L4 6 L7 8 L11 2" stroke={theme.bg} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -190,12 +219,9 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
         <div style={{ position: 'relative' }}>
           <button onClick={() => setPickerOpen(v => !v)} style={{
             display: 'flex', alignItems: 'center', gap: 8,
-            padding: '5px 10px 5px 8px',
-            border: `1px solid ${theme.border}`,
-            background: theme.bg,
-            color: theme.text,
-            borderRadius: 6, cursor: 'pointer', fontSize: 13,
-            fontFamily: 'inherit', fontWeight: 500,
+            padding: '5px 10px 5px 8px', border: `1px solid ${theme.border}`,
+            background: theme.bg, color: theme.text, borderRadius: 6,
+            cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', fontWeight: 500,
           }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: project.color }}></span>
             <span>{project.name}</span>
@@ -213,26 +239,37 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
                 background: theme.surface, border: `1px solid ${theme.border}`,
                 borderRadius: 8,
                 boxShadow: theme.dark ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.08)',
-                width: 260, padding: 4,
+                width: 280, padding: 4,
               }}>
                 {projects.map(p => (
-                  <button key={p.id} onClick={() => { onProjectChange(p.id); setPickerOpen(false); }} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    width: '100%', padding: '8px 10px', border: 'none',
-                    background: p.id === project.id ? theme.accentSoft : 'transparent',
-                    color: theme.text, borderRadius: 6, cursor: 'pointer',
-                    textAlign: 'left', fontFamily: 'inherit', fontSize: 13,
-                  }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 3, background: p.color, flexShrink: 0 }}></span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 500 }}>{p.name}</div>
-                      <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }}>{p.description}</div>
-                    </div>
-                    <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace' }}>{p.code}</span>
-                  </button>
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <button onClick={() => { onProjectChange(p.id); setPickerOpen(false); }} style={{
+                      flex: 1, display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 10px', border: 'none',
+                      background: p.id === project.id ? theme.accentSoft : 'transparent',
+                      color: theme.text, borderRadius: 6, cursor: 'pointer',
+                      textAlign: 'left', fontFamily: 'inherit', fontSize: 13,
+                    }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 3, background: p.color, flexShrink: 0 }}></span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 500 }}>{p.name}</div>
+                        <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }}>{p.description}</div>
+                      </div>
+                      <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace' }}>{p.code}</span>
+                    </button>
+                    <button onClick={() => { onEditProject(p); setPickerOpen(false); }} title="Edit project" style={{
+                      padding: 6, border: 'none', background: 'transparent',
+                      color: theme.textSubtle, borderRadius: 5, cursor: 'pointer',
+                      display: 'grid', placeItems: 'center', flexShrink: 0,
+                    }}>
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <path d="M9.5 1.5l2 2-7 7H2.5v-2l7-7z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
                 ))}
                 <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }}></div>
-                <button style={{
+                <button onClick={() => { onNewProject(); setPickerOpen(false); }} style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   width: '100%', padding: '8px 10px', border: 'none',
                   background: 'transparent', color: theme.textMuted,
@@ -341,6 +378,136 @@ function Seg({ theme, value, options, onChange }) {
           cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
         }}>{l}</button>
       ))}
+    </div>
+  );
+}
+
+const PROJECT_COLORS = [
+  '#6366f1','#3b82f6','#06b6d4','#22c55e',
+  '#84cc16','#eab308','#f97316','#ef4444',
+  '#ec4899','#a855f7','#64748b','#78716c',
+];
+
+function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
+  const isNew = !initialProject.id;
+  const [name, setName]             = React.useState(initialProject.name        || '');
+  const [code, setCode]             = React.useState(initialProject.code        || '');
+  const [description, setDescription] = React.useState(initialProject.description || '');
+  const [color, setColor]           = React.useState(initialProject.color       || PROJECT_COLORS[0]);
+  const [startDate, setStartDate]   = React.useState(initialProject.startDate   || window.TODAY);
+  const [saving, setSaving]         = React.useState(false);
+  const [error, setError]           = React.useState(null);
+
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !saving) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [saving]);
+
+  const handleSave = async () => {
+    if (!name.trim())      { setError('Name is required.');       return; }
+    if (!code.trim())      { setError('Code is required.');       return; }
+    if (!startDate)        { setError('Start date is required.'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({ name: name.trim(), code: code.trim(), description: description.trim(), color, startDate });
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete "${initialProject.name}"? All cards in this project will also be deleted.`)) return;
+    setSaving(true);
+    try {
+      await onDelete(initialProject.id);
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={() => { if (!saving) onClose(); }} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
+      <div style={{
+        position: 'relative', zIndex: 1,
+        background: theme.surface, border: `1px solid ${theme.borderStrong}`,
+        borderRadius: 12, width: 440, padding: 24,
+        boxShadow: theme.dark ? '0 24px 80px rgba(0,0,0,0.6)' : '0 24px 80px rgba(0,0,0,0.14)',
+        fontFamily: 'Inter, system-ui, sans-serif', color: theme.text,
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 20 }}>
+          {isNew ? 'New project' : 'Edit project'}
+        </div>
+
+        {/* Name + Code */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 88px', gap: 10, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 5 }}>Name</div>
+            <Input theme={theme} value={name} onChange={e => setName(e.target.value)}
+              placeholder="My Project" autoFocus />
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 5 }}>Code</div>
+            <Input theme={theme} value={code}
+              onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5))}
+              placeholder="PRJ"
+              style={{ fontFamily: 'ui-monospace, Menlo, monospace', letterSpacing: '0.04em' }} />
+          </div>
+        </div>
+
+        {/* Description */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 5 }}>Description</div>
+          <Input theme={theme} value={description} onChange={e => setDescription(e.target.value)}
+            placeholder="What is this project about?" />
+        </div>
+
+        {/* Start date */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 5 }}>Start date</div>
+          <Input theme={theme} type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+        </div>
+
+        {/* Color swatches */}
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 8 }}>Color</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {PROJECT_COLORS.map(c => (
+              <button key={c} onClick={() => setColor(c)} style={{
+                width: 22, height: 22, borderRadius: 5, padding: 0, cursor: 'pointer',
+                background: c, border: 'none',
+                outline: color === c ? `2px solid ${theme.text}` : '2px solid transparent',
+                outlineOffset: 2,
+              }} />
+            ))}
+          </div>
+        </div>
+
+        {error && (
+          <div style={{
+            fontSize: 12, color: theme.danger, marginBottom: 14,
+            padding: '8px 10px', borderRadius: 6,
+            background: `color-mix(in oklch, ${theme.danger} 10%, transparent)`,
+          }}>{error}</div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {!isNew
+            ? <Button variant="danger" size="sm" theme={theme} onClick={handleDelete} disabled={saving}>Delete project</Button>
+            : <div />
+          }
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button variant="ghost" size="sm" theme={theme} onClick={onClose} disabled={saving}>Cancel</Button>
+            <Button variant="primary" size="sm" theme={theme} onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving…' : isNew ? 'Create' : 'Save changes'}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
