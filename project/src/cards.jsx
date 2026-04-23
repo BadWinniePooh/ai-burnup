@@ -23,6 +23,7 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
   const [scopeFilter,  setScopeFilter]  = React.useState('all');
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [query,        setQuery]        = React.useState('');
+  const [showImport,   setShowImport]   = React.useState(false);
 
   const visible = filtered.filter(c => {
     if (typeFilter   !== 'all' && c.type  !== typeFilter)   return false;
@@ -101,9 +102,15 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
                 {visible.length} of {filtered.length}
               </div>
             </div>
-            <window.Button theme={theme} variant="primary" size="sm" onClick={handleNew}>
-              <span style={{ fontSize: 14, lineHeight: 1 }}>+</span> New card
-            </window.Button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <window.Button theme={theme} variant="default" size="sm" onClick={() => setShowImport(true)}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Import
+              </window.Button>
+              <window.Button theme={theme} variant="primary" size="sm" onClick={handleNew}>
+                <span style={{ fontSize: 14, lineHeight: 1 }}>+</span> New card
+              </window.Button>
+            </div>
           </div>
 
           <window.Input theme={theme} placeholder="Search by ID or title…" value={query} onChange={e => setQuery(e.target.value)}
@@ -150,6 +157,19 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
           </div>
         )}
       </div>
+
+      {showImport && (
+        <window.ImportModal
+          theme={theme}
+          project={project}
+          existingCards={filtered}
+          onImported={card => {
+            setCards(prev => [...prev, card]);
+            setSelectedUid(card.uid);
+          }}
+          onClose={() => setShowImport(false)}
+        />
+      )}
     </div>
   );
 }
