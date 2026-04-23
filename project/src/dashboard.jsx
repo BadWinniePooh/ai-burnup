@@ -52,26 +52,43 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
   const doneRatePerDay  = doneFit.m;   // cards/day — matches the chart done trendline
   const scopeRatePerDay = scopeFit.m;  // cards/day — matches the chart scope trendline
 
+  const effortScopeFit = linreg(daysSeries, 'scope');
+  const effortDoneFit  = linreg(daysSeries, 'done');
+
   // Also compute 14-day window velocity for the sub-label comparison
   const last14 = series.slice(-15);
   const doneInWindow = last14.length > 1 ? last14[last14.length - 1].doneCount - last14[0].doneCount : 0;
   const windowDays   = last14.length > 1 ? last14.length - 1 : 14;
 
-  // Projected completion: solve done_now + doneRate*t = scope_now + scopeRate*t
-  // t = remaining / (doneRate - scopeRate)
-  // Only valid when done is growing faster than scope.
-  let projection = null;
-  let gapWidening = false;
-  if (remaining > 0) {
-    const netRate = doneRatePerDay - scopeRatePerDay;
-    if (netRate > 0.001) {
-      const daysToDone = Math.round(remaining / netRate);
-      const projDate = window.addDays(new Date(latest.date), daysToDone);
-      projection = window.dateKey(projDate);
-    } else {
-      gapWidening = true; // scope growing at least as fast as done — gap won't close
+  // Solve: current_remaining / (doneRate - scopeRate) = days to completion
+  // Returns { date } | { gapWidening: true } | null (already done)
+  function computeProjection(remaining, doneRate, scopeRate) {
+    if (remaining <= 0) return null;
+    const net = doneRate - scopeRate;
+    if (net > 0.001) {
+      const d = window.addDays(new Date(latest.date), Math.round(remaining / net));
+      return { date: window.dateKey(d), doneRate, scopeRate, net };
     }
+    return { gapWidening: true, doneRate, scopeRate };
   }
+
+  const remainingDays = latest.scopeDays - latest.doneDays;
+  const cardsProj  = computeProjection(remaining,     doneRatePerDay,   scopeRatePerDay);
+  const effortProj = computeProjection(remainingDays, effortDoneFit.m,  effortScopeFit.m);
+
+  // Combined: both must close — take the later date, or flag widening if either metric diverges
+  function combinedProjection() {
+    if (!cardsProj && !effortProj) return { done: true };
+    const cGap = cardsProj?.gapWidening;
+    const eGap = effortProj?.gapWidening;
+    if (cGap && eGap) return { gapWidening: 'both' };
+    if (cGap) return { gapWidening: 'cards' };
+    if (eGap) return { gapWidening: 'effort' };
+    const dates = [cardsProj?.date, effortProj?.date].filter(Boolean);
+    if (!dates.length) return { done: true };
+    return { date: dates.sort().at(-1) }; // later of the two = conservative estimate
+  }
+  const combined = combinedProjection();
 
   // Breakdown by type and scope (from local card state — always up to date)
   const byType = {}, byScope = {};
@@ -129,8 +146,8 @@ function Dashboard({ project, cards, theme, chartStyle = 'area' }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
         <BreakdownCard theme={theme} title="By type"  items={byType}  meta={window.TYPE_META} mode="type" />
         <BreakdownCard theme={theme} title="By scope" items={byScope} mode="scope" />
-        <ProjectionCard theme={theme} projection={projection} remaining={remaining}
-          doneRate={doneRatePerDay} scopeRate={scopeRatePerDay} gapWidening={gapWidening} />
+        <ProjectionCard theme={theme} combined={combined} cardsProj={cardsProj} effortProj={effortProj}
+          remainingCards={remaining} remainingDays={remainingDays} />
       </div>
     </div>
   );
@@ -204,33 +221,73 @@ function BreakdownCard({ theme, title, items, meta, mode }) {
   );
 }
 
-function ProjectionCard({ theme, projection, remaining, doneRate, scopeRate, gapWidening }) {
+function ProjectionCard({ theme, combined, cardsProj, effortProj, remainingCards, remainingDays }) {
+  const t = theme;
+  const mono = { fontFamily: 'ui-monospace, Menlo, monospace' };
+
+  function ProjRow({ label, proj, remaining, unit }) {
+    if (!proj) return (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, marginBottom: 6 }}>
+        <span style={{ color: t.textMuted }}>{label}</span>
+        <span style={{ color: t.success, ...mono }}>✓ done</span>
+      </div>
+    );
+    if (proj.gapWidening) return (
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12 }}>
+          <span style={{ color: t.textMuted }}>{label}</span>
+          <span style={{ color: t.danger, fontWeight: 500 }}>gap widening ↗</span>
+        </div>
+        <div style={{ fontSize: 11, color: t.textSubtle, ...mono, marginTop: 2 }}>
+          {proj.doneRate.toFixed(2)} done/d · {proj.scopeRate.toFixed(2)} scope/d
+        </div>
+      </div>
+    );
+    return (
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12 }}>
+          <span style={{ color: t.textMuted }}>{label}</span>
+          <span style={{ ...mono, color: t.text, fontWeight: 500 }}>{proj.date}</span>
+        </div>
+        <div style={{ fontSize: 11, color: t.textSubtle, ...mono, marginTop: 2 }}>
+          {proj.net.toFixed(2)} net/d · {remaining % 1 === 0 ? remaining : remaining.toFixed(1)} {unit} left
+        </div>
+      </div>
+    );
+  }
+
+  const headlineColor = combined.gapWidening ? t.danger : combined.done ? t.success : t.text;
+  const headlineText  = combined.done ? 'Complete 🎯'
+    : combined.gapWidening === 'both'   ? 'Gap widening on both metrics'
+    : combined.gapWidening === 'cards'  ? 'Card count gap widening ↗'
+    : combined.gapWidening === 'effort' ? 'Effort gap widening ↗'
+    : combined.date;
+
   return (
-    <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 18 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Projection</div>
-      {remaining === 0 ? (
-        <div style={{ fontSize: 13, color: theme.success }}>Project complete 🎯</div>
-      ) : gapWidening ? (
-        <>
-          <div style={{ fontSize: 13, color: theme.danger, fontWeight: 500, marginBottom: 8 }}>Gap widening ↗</div>
-          <div style={{ fontSize: 12, color: theme.textMuted, lineHeight: 1.6 }}>
-            Scope is growing at <span style={{ color: theme.text, fontFamily: 'ui-monospace, Menlo, monospace' }}>{scopeRate.toFixed(2)}/d</span> while
-            done grows at only <span style={{ color: theme.text, fontFamily: 'ui-monospace, Menlo, monospace' }}>{doneRate.toFixed(2)}/d</span>.
-            The gap won't close at current trends.
+    <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 10, padding: 18 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Projection</div>
+
+      {/* Combined headline */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10.5, color: t.textSubtle, ...mono, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+          Est. completion
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.01em', ...mono, color: headlineColor }}>
+          {headlineText}
+        </div>
+        {!combined.done && !combined.gapWidening && (
+          <div style={{ fontSize: 11, color: t.textSubtle, marginTop: 3 }}>
+            later of cards &amp; effort (conservative)
           </div>
-        </>
-      ) : projection ? (
-        <>
-          <div style={{ fontSize: 11, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Est. completion</div>
-          <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.01em', fontFamily: 'ui-monospace, Menlo, monospace', marginBottom: 10 }}>{projection}</div>
-          <div style={{ fontSize: 12, color: theme.textMuted, lineHeight: 1.5 }}>
-            Net closure rate: <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', color: theme.text }}>{(doneRate - scopeRate).toFixed(2)}/d</span> ({doneRate.toFixed(2)} done − {scopeRate.toFixed(2)} scope growth).
-            {remaining} cards remaining.
-          </div>
-        </>
-      ) : (
-        <div style={{ fontSize: 13, color: theme.textMuted }}>Not enough data yet.</div>
-      )}
+        )}
+      </div>
+
+      {/* Divider */}
+      <div style={{ borderTop: `1px solid ${t.border}`, marginBottom: 10 }} />
+
+      {/* Per-metric rows */}
+      <ProjRow label="Cards burnup"  proj={cardsProj}  remaining={remainingCards}              unit="cards" />
+      <ProjRow label="Effort burnup" proj={effortProj} remaining={Math.round(remainingDays * 10) / 10} unit="days"  />
     </div>
   );
 }
