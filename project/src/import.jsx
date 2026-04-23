@@ -88,6 +88,7 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
   const [mapping, setMapping]         = React.useState({});
   const [enumDefaults, setEnumDefaults] = React.useState({ estimationUnit: 'days', type: 'feature', scope: 'mvp' });
   const [parsed, setParsed]           = React.useState([]);
+  const [fillGaps, setFillGaps]       = React.useState(true);
   const [importing, setImporting]     = React.useState(false);
   const [importProgress, setImportProgress] = React.useState(0);
   const [result, setResult]           = React.useState(null);
@@ -205,6 +206,37 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
     });
   }
 
+  function applyGapFill(parsedRows) {
+    const valid = parsedRows
+      .filter(r => r.errors.length === 0 && r.data.date)
+      .sort((a, b) => a.data.date.localeCompare(b.data.date));
+
+    if (valid.length < 2) return parsedRows;
+
+    const filled = [];
+    const dayMs = 86400000;
+
+    for (let i = 0; i < valid.length; i++) {
+      filled.push(valid[i]);
+      if (i < valid.length - 1) {
+        let d = new Date(valid[i].data.date + 'T00:00:00Z');
+        const next = new Date(valid[i + 1].data.date + 'T00:00:00Z');
+        d = new Date(d.getTime() + dayMs);
+        while (d < next) {
+          filled.push({
+            errors: [],
+            data: { ...valid[i].data, date: d.toISOString().slice(0, 10) },
+            gapFill: true,
+          });
+          d = new Date(d.getTime() + dayMs);
+        }
+      }
+    }
+
+    const errorRows = parsedRows.filter(r => r.errors.length > 0 || !r.data.date);
+    return [...filled, ...errorRows];
+  }
+
   async function doImportCards() {
     const valid = parsed.filter(r => r.errors.length === 0);
     setImporting(true);
@@ -225,7 +257,8 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
   }
 
   async function doImportSnapshots() {
-    const valid = parsed.filter(r => r.errors.length === 0);
+    const effective = fillGaps ? applyGapFill(parsed) : parsed;
+    const valid = effective.filter(r => r.errors.length === 0);
     setImporting(true);
     try {
       const res = await window.api.importSnapshots(project.id, valid.map(r => r.data));
@@ -243,8 +276,10 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
     .filter(f => f.required)
     .every(f => mapping[f.key] && mapping[f.key] !== '');
 
-  const validCount = parsed.filter(r => r.errors.length === 0).length;
-  const errorCount = parsed.filter(r => r.errors.length > 0).length;
+  const effectiveParsed = (importType === 'snapshots' && fillGaps) ? applyGapFill(parsed) : parsed;
+  const validCount = effectiveParsed.filter(r => r.errors.length === 0).length;
+  const errorCount = effectiveParsed.filter(r => r.errors.length > 0).length;
+  const gapCount   = effectiveParsed.filter(r => r.gapFill).length;
 
   const sampleVal = colIdx => {
     const i = parseInt(colIdx);
@@ -463,24 +498,45 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
           {/* ── Step 4: Preview ── */}
           {step === 4 && (
             <div>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: 13 }}>
+              {importType === 'snapshots' && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer', marginBottom: 14, userSelect: 'none' }}>
+                  <input type="checkbox" checked={fillGaps} onChange={e => setFillGaps(e.target.checked)}
+                    style={{ width: 14, height: 14, cursor: 'pointer', accentColor: t.accent }} />
+                  <span>Fill missing days with last known values</span>
+                  <span style={{ color: t.textSubtle, fontSize: 11.5 }}>(weekends, public holidays)</span>
+                  {fillGaps && gapCount > 0 && (
+                    <span style={{ marginLeft: 4, padding: '1px 7px', borderRadius: 10, background: t.accentSoft, color: t.accent, fontSize: 11, fontWeight: 600 }}>
+                      +{gapCount} days added
+                    </span>
+                  )}
+                </label>
+              )}
+              <div style={{ display: 'flex', gap: 16, marginBottom: 12, fontSize: 13 }}>
                 <span style={{ color: t.success, fontWeight: 500 }}>✓ {validCount} ready</span>
                 {errorCount > 0 && <span style={{ color: t.danger, fontWeight: 500 }}>✗ {errorCount} with errors</span>}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflowY: 'auto' }}>
-                {parsed.map((row, i) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 320, overflowY: 'auto' }}>
+                {effectiveParsed.map((row, i) => (
                   <div key={i} style={{
-                    padding: '9px 12px', borderRadius: 7, fontSize: 12,
+                    padding: '7px 12px', borderRadius: 7, fontSize: 12,
                     border: `1px solid ${row.errors.length ? t.danger : t.border}`,
+                    opacity: row.gapFill ? 0.6 : 1,
                     background: row.errors.length
                       ? (t.dark ? 'rgba(220,60,40,0.06)' : 'rgba(220,60,40,0.04)')
-                      : (t.dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)'),
+                      : row.gapFill
+                        ? (t.dark ? 'rgba(255,255,255,0.01)' : 'rgba(0,0,0,0.015)')
+                        : (t.dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)'),
                   }}>
                     {importType === 'snapshots' ? (
-                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
                         <span style={{ fontWeight: 500, fontFamily: 'ui-monospace, Menlo, monospace' }}>{row.data.date || '—'}</span>
-                        <span style={{ color: t.textMuted }}>scope: {row.data.scopeCount} cards / {row.data.scopeDays}d</span>
-                        <span style={{ color: t.textMuted }}>done: {row.data.doneCount} cards / {row.data.doneDays}d</span>
+                        <span style={{ color: t.textMuted }}>scope: {row.data.scopeCount} / {row.data.scopeDays}d</span>
+                        <span style={{ color: t.textMuted }}>done: {row.data.doneCount} / {row.data.doneDays}d</span>
+                        {row.gapFill && (
+                          <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: t.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', color: t.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+                            gap fill
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
