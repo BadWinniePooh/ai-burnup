@@ -40,4 +40,8 @@ window.api = {
   createCard: (data)      => apiFetch('/api/cards',           { method: 'POST',   body: JSON.stringify(data) }),
   updateCard: (uid, data) => apiFetch(`/api/cards/${enc(uid)}`, { method: 'PUT',  body: JSON.stringify(data) }),
   deleteCard: (uid)       => apiFetch(`/api/cards/${enc(uid)}`, { method: 'DELETE'                           }),
+
+  // Snapshot import (upserts rows for a project's burnup history)
+  importSnapshots: (projectId, rows) =>
+    apiFetch(`/api/projects/${enc(projectId)}/snapshots`, { method: 'POST', body: JSON.stringify(rows) }),
 };

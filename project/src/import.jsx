@@ -1,19 +1,27 @@
-// Excel / CSV import wizard (4 steps: sheet → map columns → preview → done).
+// Excel / CSV import wizard (steps: type → sheet → map columns → preview → done).
 // Requires SheetJS (window.XLSX) loaded before this script.
 
-const IMPORT_FIELDS = [
+const CARD_FIELDS = [
   { key: 'cardNumber',     label: 'Card number',    required: false, hint: 'Auto-generated if blank' },
   { key: 'title',          label: 'Title',           required: true  },
   { key: 'createdDate',    label: 'Created date',    required: true  },
   { key: 'startedDate',    label: 'Started date',    required: false },
   { key: 'endDate',        label: 'Done date',       required: false },
   { key: 'estimation',     label: 'Estimation',      required: false, hint: 'Default: 1' },
-  { key: 'estimationUnit', label: 'Unit',            required: false, enumOpts: ['days', 'points'],          defaultVal: 'days'    },
+  { key: 'estimationUnit', label: 'Unit',            required: false, enumOpts: ['days', 'points'],           defaultVal: 'days'    },
   { key: 'type',           label: 'Type',            required: false, enumOpts: ['feature','bug','no-code','tiny'], defaultVal: 'feature' },
-  { key: 'scope',          label: 'Scope',           required: false, enumOpts: ['mvp','mlp','other'],       defaultVal: 'mvp'     },
+  { key: 'scope',          label: 'Scope',           required: false, enumOpts: ['mvp','mlp','other'],        defaultVal: 'mvp'     },
 ];
 
-function autoDetectMapping(headers) {
+const SNAPSHOT_FIELDS = [
+  { key: 'date',       label: 'Date',          required: true,  hint: 'yyyy-MM-dd' },
+  { key: 'scopeCount', label: 'Scope (count)', required: false, hint: 'Integer, default 0' },
+  { key: 'doneCount',  label: 'Done (count)',  required: false, hint: 'Integer, default 0' },
+  { key: 'scopeDays',  label: 'Scope (days)',  required: false, hint: 'Decimal, default 0' },
+  { key: 'doneDays',   label: 'Done (days)',   required: false, hint: 'Decimal, default 0' },
+];
+
+function autoDetectCardMapping(headers) {
   const lc = headers.map(h => String(h || '').toLowerCase().trim());
   const patterns = {
     cardNumber:     [/#/, /\bnumber\b/, /\bnum\b/, /card.?num/, /ticket/, /\bid\b/],
@@ -25,6 +33,24 @@ function autoDetectMapping(headers) {
     estimationUnit: [/unit/],
     type:           [/\btype\b/, /\bkind\b/, /categor/],
     scope:          [/\bscope\b/, /prior/, /\btier\b/],
+  };
+  const m = {};
+  for (const [field, pats] of Object.entries(patterns)) {
+    for (let i = 0; i < lc.length; i++) {
+      if (pats.some(p => p.test(lc[i]))) { m[field] = String(i); break; }
+    }
+  }
+  return m;
+}
+
+function autoDetectSnapshotMapping(headers) {
+  const lc = headers.map(h => String(h || '').toLowerCase().trim());
+  const patterns = {
+    date:       [/\bdate\b/, /\bday\b/, /\bwhen\b/],
+    scopeCount: [/scope.*(count|num|cards?)/, /total.*(count|cards?)/, /count.*scope/],
+    doneCount:  [/done.*(count|num|cards?)/, /complet.*(count|cards?)/, /finish.*(count|cards?)/, /count.*done/],
+    scopeDays:  [/scope.*days?/, /total.*days?/, /days?.*scope/, /scope.*effort/],
+    doneDays:   [/done.*days?/, /complet.*days?/, /finish.*days?/, /days?.*done/],
   };
   const m = {};
   for (const [field, pats] of Object.entries(patterns)) {
@@ -53,10 +79,11 @@ function fmtDate(val) {
 
 function ImportModal({ theme, project, existingCards, onImported, onClose }) {
   const t = theme;
+  const [importType, setImportType]    = React.useState(null); // 'cards' | 'snapshots'
   const [step, setStep]               = React.useState(0);
   const [workbook, setWorkbook]       = React.useState(null);
   const [sheetName, setSheetName]     = React.useState('');
-  const [rows, setRows]               = React.useState([]);   // incl. header row
+  const [rows, setRows]               = React.useState([]);
   const [headers, setHeaders]         = React.useState([]);
   const [mapping, setMapping]         = React.useState({});
   const [enumDefaults, setEnumDefaults] = React.useState({ estimationUnit: 'days', type: 'feature', scope: 'mvp' });
@@ -83,7 +110,7 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
         const first = wb.SheetNames[0];
         setSheetName(first);
         applySheet(wb, first);
-        setStep(1);
+        setStep(2);
       } catch (err) {
         alert('Could not parse file: ' + err.message);
       }
@@ -98,12 +125,19 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
     setRows(nonempty);
     const hdrs = (nonempty[0] || []).map(h => String(h));
     setHeaders(hdrs);
-    setMapping(autoDetectMapping(hdrs));
+    setMapping(importType === 'snapshots' ? autoDetectSnapshotMapping(hdrs) : autoDetectCardMapping(hdrs));
   }
+
+  // Re-run auto-detect when importType changes and headers are available
+  React.useEffect(() => {
+    if (headers.length > 0) {
+      setMapping(importType === 'snapshots' ? autoDetectSnapshotMapping(headers) : autoDetectCardMapping(headers));
+    }
+  }, [importType]);
 
   const dataRows = rows.slice(1).filter(row => row.some(c => c !== ''));
 
-  function buildParsed() {
+  function buildParsedCards() {
     const usedNums = new Set(existingCards.map(c => c.cardNumber));
     let nextNum = (existingCards.length > 0 ? Math.max(...existingCards.map(c => c.cardNumber)) : 0) + 1;
 
@@ -151,7 +185,27 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
     });
   }
 
-  async function doImport() {
+  function buildParsedSnapshots() {
+    return dataRows.map(row => {
+      const get = key => {
+        const col = mapping[key];
+        return (col !== undefined && col !== '') ? row[parseInt(col)] : undefined;
+      };
+      const errors = [];
+
+      const date = fmtDate(get('date'));
+      if (!date) errors.push('Date is missing or invalid');
+
+      const scopeCount = Math.max(0, parseInt(String(get('scopeCount') ?? '0').replace(',', '.')) || 0);
+      const doneCount  = Math.max(0, parseInt(String(get('doneCount')  ?? '0').replace(',', '.')) || 0);
+      const scopeDays  = Math.max(0, parseFloat(String(get('scopeDays') ?? '0').replace(',', '.')) || 0);
+      const doneDays   = Math.max(0, parseFloat(String(get('doneDays')  ?? '0').replace(',', '.')) || 0);
+
+      return { errors, data: { date, scopeCount, doneCount, scopeDays: Math.round(scopeDays * 10) / 10, doneDays: Math.round(doneDays * 10) / 10 } };
+    });
+  }
+
+  async function doImportCards() {
     const valid = parsed.filter(r => r.errors.length === 0);
     setImporting(true);
     let imported = 0, failed = 0;
@@ -167,10 +221,25 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
     }
     setResult({ imported, failed });
     setImporting(false);
-    setStep(4);
+    setStep(5);
   }
 
-  const canAdvanceToPreview = IMPORT_FIELDS
+  async function doImportSnapshots() {
+    const valid = parsed.filter(r => r.errors.length === 0);
+    setImporting(true);
+    try {
+      const res = await window.api.importSnapshots(project.id, valid.map(r => r.data));
+      setResult({ imported: res.imported, failed: valid.length - res.imported });
+    } catch {
+      setResult({ imported: 0, failed: valid.length });
+    }
+    setImporting(false);
+    setStep(5);
+  }
+
+  const activeFields = importType === 'snapshots' ? SNAPSHOT_FIELDS : CARD_FIELDS;
+
+  const canAdvanceToPreview = activeFields
     .filter(f => f.required)
     .every(f => mapping[f.key] && mapping[f.key] !== '');
 
@@ -194,54 +263,93 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
     </>
   );
 
-  const STEPS = ['Upload', 'Sheet', 'Map columns', 'Preview', 'Done'];
+  // Steps: 0=Type, 1=Upload, 2=Sheet, 3=Map, 4=Preview, 5=Done
+  const STEPS = ['Type', 'Upload', 'Sheet', 'Map columns', 'Preview', 'Done'];
 
   const inputStyle = {
     padding: '6px 10px', border: `1px solid ${t.border}`, borderRadius: 6,
     background: t.surface, color: t.text, fontFamily: 'inherit', fontSize: 12.5, cursor: 'pointer',
   };
 
+  const typeCardStyle = (active) => ({
+    flex: 1, padding: '20px 18px', borderRadius: 10, cursor: 'pointer', textAlign: 'center',
+    border: `2px solid ${active ? t.accent : t.border}`,
+    background: active ? t.accentSoft : 'transparent',
+    transition: 'all 0.15s',
+  });
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={() => { if (!importing) onClose(); }} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} />
       <div style={{
         position: 'relative', zIndex: 1, background: t.surface, border: `1px solid ${t.borderStrong}`,
-        borderRadius: 12, width: 700, maxHeight: '88vh', display: 'flex', flexDirection: 'column',
+        borderRadius: 12, width: 'min(700px, 96vw)', maxHeight: '90vh', display: 'flex', flexDirection: 'column',
         boxShadow: t.dark ? '0 24px 80px rgba(0,0,0,0.65)' : '0 24px 80px rgba(0,0,0,0.15)',
         fontFamily: 'Inter, system-ui, sans-serif', color: t.text,
       }}>
 
         {/* Header */}
-        <div style={{ padding: '20px 24px 14px', borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Import from spreadsheet → {project.name}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+        <div style={{ padding: '18px 22px 12px', borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Import from spreadsheet → {project.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto' }}>
             {STEPS.map((label, i) => (
               <React.Fragment key={i}>
                 <div style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '3px 10px 3px 6px', borderRadius: 20, fontSize: 11.5, fontWeight: 500,
+                  display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+                  padding: '3px 8px 3px 5px', borderRadius: 20, fontSize: 11, fontWeight: 500,
                   background: i === step ? t.accentSoft : 'transparent',
                   color: i === step ? t.accent : i < step ? t.textMuted : t.textSubtle,
+                  whiteSpace: 'nowrap',
                 }}>
                   <span style={{
-                    width: 18, height: 18, borderRadius: '50%', display: 'grid', placeItems: 'center',
-                    fontSize: 10, fontWeight: 700, flexShrink: 0,
+                    width: 16, height: 16, borderRadius: '50%', display: 'grid', placeItems: 'center',
+                    fontSize: 9, fontWeight: 700, flexShrink: 0,
                     background: i < step ? t.success : i === step ? t.accent : t.border,
                     color: i <= step ? '#fff' : t.textSubtle,
                   }}>{i < step ? '✓' : i + 1}</span>
                   {label}
                 </div>
-                {i < STEPS.length - 1 && <div style={{ width: 20, height: 1, background: t.border, flexShrink: 0 }} />}
+                {i < STEPS.length - 1 && <div style={{ width: 14, height: 1, background: t.border, flexShrink: 0 }} />}
               </React.Fragment>
             ))}
           </div>
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 22px' }}>
 
-          {/* ── Step 0: Upload ── */}
+          {/* ── Step 0: Type selection ── */}
           {step === 0 && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 14 }}>What do you want to import?</div>
+              <div style={{ display: 'flex', gap: 14, marginBottom: 10 }}>
+                <div style={typeCardStyle(importType === 'cards')} onClick={() => setImportType('cards')}>
+                  <div style={{ fontSize: 28, marginBottom: 10 }}>🃏</div>
+                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Cards</div>
+                  <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.4 }}>
+                    Import work items — title, dates, estimation, type and scope.
+                  </div>
+                </div>
+                <div style={typeCardStyle(importType === 'snapshots')} onClick={() => setImportType('snapshots')}>
+                  <div style={{ fontSize: 28, marginBottom: 10 }}>📈</div>
+                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Snapshots</div>
+                  <div style={{ fontSize: 12, color: t.textMuted, lineHeight: 1.4 }}>
+                    Import historical burnup data — daily scope and done counts/days.
+                  </div>
+                </div>
+              </div>
+              {importType && (
+                <div style={{ marginTop: 6, fontSize: 12, color: t.textMuted, textAlign: 'center' }}>
+                  {importType === 'snapshots'
+                    ? 'Existing snapshots for the same dates will be overwritten.'
+                    : 'Cards with duplicate numbers will be flagged before import.'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Step 1: Upload ── */}
+          {step === 1 && (
             <div
               onDragOver={e => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
@@ -264,8 +372,8 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
             </div>
           )}
 
-          {/* ── Step 1: Sheet selection ── */}
-          {step === 1 && workbook && (
+          {/* ── Step 2: Sheet selection ── */}
+          {step === 2 && workbook && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
                 <div>
@@ -309,177 +417,160 @@ function ImportModal({ theme, project, existingCards, onImported, onClose }) {
             </div>
           )}
 
-          {/* ── Step 2: Column mapping ── */}
-          {step === 2 && (
-            <div>
-              <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 16 }}>
-                Map spreadsheet columns to card fields. Columns were auto-detected where possible — adjust as needed.
-              </div>
-              <div style={{ border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: t.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}>
-                      {['App field', 'Spreadsheet column', 'Sample value'].map(h => (
-                        <th key={h} style={{ padding: '8px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: t.textMuted, borderBottom: `1px solid ${t.border}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {IMPORT_FIELDS.map((field, fi) => {
-                      const isMapped = mapping[field.key] && mapping[field.key] !== '';
-                      return (
-                        <tr key={field.key} style={{ borderBottom: fi < IMPORT_FIELDS.length - 1 ? `1px solid ${t.border}` : 'none' }}>
-                          <td style={{ padding: '10px 14px', verticalAlign: 'middle', minWidth: 140 }}>
-                            <div style={{ fontWeight: 500, fontSize: 13 }}>{field.label}</div>
-                            {field.required
-                              ? <div style={{ fontSize: 10.5, color: t.danger, fontWeight: 600, marginTop: 2 }}>REQUIRED</div>
-                              : field.hint
-                                ? <div style={{ fontSize: 11, color: t.textSubtle, marginTop: 2 }}>{field.hint}</div>
-                                : null
-                            }
-                          </td>
-                          <td style={{ padding: '10px 14px', verticalAlign: 'middle' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <select value={mapping[field.key] ?? ''} onChange={e => setMapping(m => ({ ...m, [field.key]: e.target.value }))} style={{ ...inputStyle, flex: 1, minWidth: 0 }}>
-                                {colOpts}
-                              </select>
-                              {field.enumOpts && !isMapped && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                                  <span style={{ fontSize: 11, color: t.textSubtle }}>default:</span>
-                                  <select value={enumDefaults[field.key] ?? field.defaultVal}
-                                    onChange={e => setEnumDefaults(d => ({ ...d, [field.key]: e.target.value }))}
-                                    style={{ ...inputStyle, background: t.accentSoft, color: t.accent, fontWeight: 500 }}>
-                                    {field.enumOpts.map(o => <option key={o} value={o}>{o}</option>)}
-                                  </select>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td style={{ padding: '10px 14px', verticalAlign: 'middle', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11.5, color: isMapped ? t.textMuted : t.textSubtle, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {isMapped ? (sampleVal(mapping[field.key]) || '—') : ''}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 3: Preview ── */}
+          {/* ── Step 3: Column mapping ── */}
           {step === 3 && (
-            <div>
-              <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-                <div style={{ flex: 1, padding: '14px 18px', borderRadius: 8, border: `1px solid color-mix(in oklch, ${t.success} 30%, transparent)`, background: `color-mix(in oklch, ${t.success} 10%, transparent)` }}>
-                  <div style={{ fontSize: 28, fontWeight: 700, color: t.success, lineHeight: 1 }}>{validCount}</div>
-                  <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>row{validCount !== 1 ? 's' : ''} ready to import</div>
-                </div>
-                {errorCount > 0 && (
-                  <div style={{ flex: 1, padding: '14px 18px', borderRadius: 8, border: `1px solid color-mix(in oklch, ${t.danger} 30%, transparent)`, background: `color-mix(in oklch, ${t.danger} 8%, transparent)` }}>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: t.danger, lineHeight: 1 }}>{errorCount}</div>
-                    <div style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>row{errorCount !== 1 ? 's' : ''} with errors (skipped)</div>
-                  </div>
-                )}
-              </div>
-
-              {validCount > 0 && (
-                <div style={{ overflowX: 'auto', border: `1px solid ${t.border}`, borderRadius: 8, marginBottom: 14 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead>
-                      <tr style={{ background: t.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}>
-                        {['#', 'Title', 'Created', 'Started', 'Done', 'Est.', 'Type', 'Scope'].map(h => (
-                          <th key={h} style={{ padding: '7px 10px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: t.textMuted, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parsed.filter(r => r.errors.length === 0).slice(0, 10).map(({ data: d }, i) => (
-                        <tr key={i}>
-                          <td style={{ padding: '6px 10px', borderBottom: `1px solid ${t.border}`, fontFamily: 'ui-monospace, Menlo, monospace', color: t.textMuted }}>{d.cardNumber}</td>
-                          <td style={{ padding: '6px 10px', borderBottom: `1px solid ${t.border}`, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</td>
-                          <td style={{ padding: '6px 10px', borderBottom: `1px solid ${t.border}`, fontFamily: 'ui-monospace, Menlo, monospace', color: t.textMuted, whiteSpace: 'nowrap' }}>{d.createdDate}</td>
-                          <td style={{ padding: '6px 10px', borderBottom: `1px solid ${t.border}`, fontFamily: 'ui-monospace, Menlo, monospace', color: t.textMuted, whiteSpace: 'nowrap' }}>{d.startedDate || '—'}</td>
-                          <td style={{ padding: '6px 10px', borderBottom: `1px solid ${t.border}`, fontFamily: 'ui-monospace, Menlo, monospace', color: t.textMuted, whiteSpace: 'nowrap' }}>{d.endDate || '—'}</td>
-                          <td style={{ padding: '6px 10px', borderBottom: `1px solid ${t.border}`, fontFamily: 'ui-monospace, Menlo, monospace', color: t.textMuted }}>{d.estimation}{d.estimationUnit === 'points' ? 'p' : 'd'}</td>
-                          <td style={{ padding: '6px 10px', borderBottom: `1px solid ${t.border}`, color: t.textMuted }}>{d.type}</td>
-                          <td style={{ padding: '6px 10px', borderBottom: `1px solid ${t.border}`, color: t.textMuted }}>{d.scope}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {validCount > 10 && (
-                    <div style={{ padding: '8px 12px', fontSize: 12, color: t.textSubtle }}>… and {validCount - 10} more rows</div>
-                  )}
-                </div>
-              )}
-
-              {errorCount > 0 && (
-                <div style={{ border: `1px solid color-mix(in oklch, ${t.danger} 25%, transparent)`, borderRadius: 8, overflow: 'hidden' }}>
-                  {parsed.filter(r => r.errors.length > 0).slice(0, 5).map(({ data: d, errors }, i, arr) => (
-                    <div key={i} style={{ padding: '8px 14px', borderBottom: i < arr.length - 1 ? `1px solid color-mix(in oklch, ${t.danger} 15%, transparent)` : 'none', fontSize: 12, display: 'flex', gap: 10, alignItems: 'baseline' }}>
-                      <span style={{ color: t.danger, flexShrink: 0 }}>✕</span>
-                      <span style={{ color: t.textMuted, flexShrink: 0 }}>{d.title || '(no title)'}</span>
-                      <span style={{ color: t.danger }}>{errors.join(' · ')}</span>
+            <div style={{ display: 'grid', gap: 14 }}>
+              {activeFields.map(field => (
+                <div key={field.key} style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 12, alignItems: 'start' }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 2 }}>
+                      {field.label}
+                      {field.required && <span style={{ color: t.danger, marginLeft: 3 }}>*</span>}
                     </div>
-                  ))}
-                  {errorCount > 5 && <div style={{ padding: '6px 14px', fontSize: 11, color: t.textSubtle }}>… and {errorCount - 5} more</div>}
+                    {field.hint && <div style={{ fontSize: 11, color: t.textSubtle }}>{field.hint}</div>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <select
+                      value={mapping[field.key] ?? ''}
+                      onChange={e => setMapping(m => ({ ...m, [field.key]: e.target.value }))}
+                      style={{ ...inputStyle, width: '100%' }}
+                    >
+                      {colOpts}
+                    </select>
+                    {mapping[field.key] && mapping[field.key] !== '' && (
+                      <div style={{ fontSize: 11, color: t.textMuted, fontFamily: 'ui-monospace, Menlo, monospace', paddingLeft: 2 }}>
+                        Sample: {sampleVal(mapping[field.key]) || <em style={{ color: t.textSubtle }}>empty</em>}
+                      </div>
+                    )}
+                    {field.enumOpts && (!mapping[field.key] || mapping[field.key] === '') && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
+                        <span style={{ color: t.textSubtle }}>Default:</span>
+                        <select
+                          value={enumDefaults[field.key] ?? field.defaultVal}
+                          onChange={e => setEnumDefaults(d => ({ ...d, [field.key]: e.target.value }))}
+                          style={{ ...inputStyle, fontSize: 11.5, padding: '3px 8px' }}
+                        >
+                          {field.enumOpts.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           )}
 
-          {/* ── Step 4: Done ── */}
-          {step === 4 && result && (
+          {/* ── Step 4: Preview ── */}
+          {step === 4 && (
+            <div>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: 13 }}>
+                <span style={{ color: t.success, fontWeight: 500 }}>✓ {validCount} ready</span>
+                {errorCount > 0 && <span style={{ color: t.danger, fontWeight: 500 }}>✗ {errorCount} with errors</span>}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflowY: 'auto' }}>
+                {parsed.map((row, i) => (
+                  <div key={i} style={{
+                    padding: '9px 12px', borderRadius: 7, fontSize: 12,
+                    border: `1px solid ${row.errors.length ? t.danger : t.border}`,
+                    background: row.errors.length
+                      ? (t.dark ? 'rgba(220,60,40,0.06)' : 'rgba(220,60,40,0.04)')
+                      : (t.dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)'),
+                  }}>
+                    {importType === 'snapshots' ? (
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 500, fontFamily: 'ui-monospace, Menlo, monospace' }}>{row.data.date || '—'}</span>
+                        <span style={{ color: t.textMuted }}>scope: {row.data.scopeCount} cards / {row.data.scopeDays}d</span>
+                        <span style={{ color: t.textMuted }}>done: {row.data.doneCount} cards / {row.data.doneDays}d</span>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', color: t.textMuted }}>#{row.data.cardNumber}</span>
+                        <span style={{ fontWeight: 500 }}>{row.data.title}</span>
+                        <span style={{ color: t.textMuted }}>{row.data.createdDate}</span>
+                        <span style={{ color: t.textMuted }}>{row.data.estimation}{row.data.estimationUnit === 'days' ? 'd' : 'p'}</span>
+                      </div>
+                    )}
+                    {row.errors.length > 0 && (
+                      <div style={{ marginTop: 4, color: t.danger, fontSize: 11 }}>
+                        {row.errors.join(' · ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 5: Done ── */}
+          {step === 5 && result && (
             <div style={{ textAlign: 'center', padding: '32px 0' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>{result.failed === 0 ? '✅' : '⚠️'}</div>
-              <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>
-                {result.imported} card{result.imported !== 1 ? 's' : ''} imported
+              <div style={{ fontSize: 40, marginBottom: 16 }}>{result.failed === 0 ? '✅' : '⚠️'}</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+                {result.imported} {importType === 'snapshots' ? 'snapshot' : 'card'}{result.imported !== 1 ? 's' : ''} imported
               </div>
               {result.failed > 0 && (
-                <div style={{ fontSize: 13, color: t.danger, marginTop: 6 }}>
-                  {result.failed} row{result.failed !== 1 ? 's' : ''} failed to import
+                <div style={{ fontSize: 13, color: t.danger }}>{result.failed} failed</div>
+              )}
+              {importType === 'snapshots' && result.imported > 0 && (
+                <div style={{ marginTop: 10, fontSize: 12, color: t.textMuted }}>
+                  Switch to the Dashboard tab to see the updated burnup charts.
                 </div>
               )}
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 12 }}>
-                Cards are now visible in the {project.name} card list.
-              </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '14px 24px', borderTop: `1px solid ${t.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <Button variant="ghost" size="sm" theme={t} onClick={onClose} disabled={importing}>
-            {step === 4 ? 'Close' : 'Cancel'}
-          </Button>
+        <div style={{
+          padding: '12px 22px 16px', borderTop: `1px solid ${t.border}`, flexShrink: 0,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+        }}>
+          <window.Button theme={t} variant="ghost" size="sm" onClick={() => { if (!importing) onClose(); }} disabled={importing}>
+            {step === 5 ? 'Close' : 'Cancel'}
+          </window.Button>
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {importing && (
-              <span style={{ fontSize: 12, color: t.textMuted }}>
+              <span style={{ fontSize: 12, color: t.textMuted, fontFamily: 'ui-monospace, Menlo, monospace' }}>
                 Importing {importProgress + 1} / {parsed.filter(r => r.errors.length === 0).length}…
               </span>
             )}
-            {step > 0 && step < 4 && !importing && (
-              <Button variant="default" size="sm" theme={t} onClick={() => setStep(s => s - 1)}>← Back</Button>
+            {step > 0 && step < 5 && !importing && (
+              <window.Button variant="default" size="sm" theme={t} onClick={() => setStep(s => s - 1)}>← Back</window.Button>
+            )}
+            {step === 0 && (
+              <window.Button variant="primary" size="sm" theme={t}
+                onClick={() => setStep(1)} disabled={!importType}>
+                Next →
+              </window.Button>
             )}
             {step === 1 && (
-              <Button variant="primary" size="sm" theme={t} onClick={() => setStep(2)} disabled={dataRows.length === 0}>
-                Map columns →
-              </Button>
+              <window.Button variant="default" size="sm" theme={t} onClick={() => fileRef.current?.click()}>
+                Browse files…
+              </window.Button>
             )}
             {step === 2 && (
-              <Button variant="primary" size="sm" theme={t}
-                onClick={() => { setParsed(buildParsed()); setStep(3); }}
-                disabled={!canAdvanceToPreview}>
-                Preview →
-              </Button>
+              <window.Button variant="primary" size="sm" theme={t}
+                onClick={() => setStep(3)} disabled={dataRows.length === 0}>
+                Map columns →
+              </window.Button>
             )}
             {step === 3 && (
-              <Button variant="accent" size="sm" theme={t}
-                onClick={doImport} disabled={importing || validCount === 0}>
-                Import {validCount} card{validCount !== 1 ? 's' : ''}
-              </Button>
+              <window.Button variant="primary" size="sm" theme={t}
+                onClick={() => {
+                  setParsed(importType === 'snapshots' ? buildParsedSnapshots() : buildParsedCards());
+                  setStep(4);
+                }}
+                disabled={!canAdvanceToPreview}>
+                Preview →
+              </window.Button>
+            )}
+            {step === 4 && (
+              <window.Button variant="accent" size="sm" theme={t}
+                onClick={importType === 'snapshots' ? doImportSnapshots : doImportCards}
+                disabled={importing || validCount === 0}>
+                Import {validCount} {importType === 'snapshots' ? 'snapshot' : 'card'}{validCount !== 1 ? 's' : ''}
+              </window.Button>
             )}
           </div>
         </div>

@@ -24,6 +24,14 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [query,        setQuery]        = React.useState('');
   const [showImport,   setShowImport]   = React.useState(false);
+  const [mobilePanel,  setMobilePanel]  = React.useState('list'); // 'list' | 'editor'
+  const [isMobile,     setIsMobile]     = React.useState(() => window.innerWidth < 700);
+
+  React.useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 700);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const visible = filtered.filter(c => {
     if (typeFilter   !== 'all' && c.type  !== typeFilter)   return false;
@@ -89,74 +97,95 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
     }).catch(() => {});
   };
 
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', height: '100%', minHeight: 0 }}>
-      {/* LEFT: list */}
-      <div style={{ borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {/* Toolbar */}
-        <div style={{ padding: '14px 16px 12px', borderBottom: `1px solid ${theme.border}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Cards</div>
-              <div style={{ fontSize: 11, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace' }}>
-                {visible.length} of {filtered.length}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <window.Button theme={theme} variant="default" size="sm" onClick={() => setShowImport(true)}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Import
-              </window.Button>
-              <window.Button theme={theme} variant="primary" size="sm" onClick={handleNew}>
-                <span style={{ fontSize: 14, lineHeight: 1 }}>+</span> New card
-              </window.Button>
+  const listPanel = (
+    <div style={{ borderRight: isMobile ? 'none' : `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
+      {/* Toolbar */}
+      <div style={{ padding: '14px 16px 12px', borderBottom: `1px solid ${theme.border}` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Cards</div>
+            <div style={{ fontSize: 11, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+              {visible.length} of {filtered.length}
             </div>
           </div>
-
-          <window.Input theme={theme} placeholder="Search by ID or title…" value={query} onChange={e => setQuery(e.target.value)}
-            style={{ fontSize: 12.5, padding: '6px 10px' }} />
-
-          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-            <FilterPill theme={theme} label="Status" value={statusFilter} onChange={setStatusFilter}
-              options={[['all', 'All'], ['backlog', 'Backlog'], ['active', 'Active'], ['done', 'Done']]} />
-            <FilterPill theme={theme} label="Type" value={typeFilter} onChange={setTypeFilter}
-              options={[['all', 'All'], ...window.CARD_TYPES.map(t => [t, window.TYPE_META[t].label])]} />
-            <FilterPill theme={theme} label="Scope" value={scopeFilter} onChange={setScopeFilter}
-              options={[['all', 'All'], ...window.SCOPES.map(s => [s, s.toUpperCase()])]} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <window.Button theme={theme} variant="default" size="sm" onClick={() => setShowImport(true)}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Import
+            </window.Button>
+            <window.Button theme={theme} variant="primary" size="sm" onClick={handleNew}>
+              <span style={{ fontSize: 14, lineHeight: 1 }}>+</span> New card
+            </window.Button>
           </div>
         </div>
 
-        {/* Scrollable list */}
-        <div style={{ overflowY: 'auto', flex: 1 }}>
-          {visible.length === 0 && (
-            <div style={{ padding: 32, color: theme.textMuted, fontSize: 13, textAlign: 'center' }}>No cards match filters.</div>
-          )}
-          {visible.map(c => (
-            <CardRow key={c.uid} card={c} project={project} theme={theme}
-              selected={c.uid === selectedUid} onClick={() => setSelectedUid(c.uid)} />
-          ))}
+        <window.Input theme={theme} placeholder="Search by ID or title…" value={query} onChange={e => setQuery(e.target.value)}
+          style={{ fontSize: 12.5, padding: '6px 10px' }} />
+
+        <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+          <FilterPill theme={theme} label="Status" value={statusFilter} onChange={setStatusFilter}
+            options={[['all', 'All'], ['backlog', 'Backlog'], ['active', 'Active'], ['done', 'Done']]} />
+          <FilterPill theme={theme} label="Type" value={typeFilter} onChange={setTypeFilter}
+            options={[['all', 'All'], ...window.CARD_TYPES.map(tp => [tp, window.TYPE_META[tp].label])]} />
+          <FilterPill theme={theme} label="Scope" value={scopeFilter} onChange={setScopeFilter}
+            options={[['all', 'All'], ...window.SCOPES.map(s => [s, s.toUpperCase()])]} />
         </div>
       </div>
 
-      {/* RIGHT: edit form or empty state */}
-      <div style={{ overflowY: 'auto' }}>
-        {selected ? (
-          <CardEditForm
-            key={selected.uid}
-            card={selected}
-            project={project}
-            allCards={cards}
-            theme={theme}
-            onUpdate={handleUpdate}
-            onApiSave={handleApiSave}
-            onDelete={() => handleDelete(selected.uid)}
-          />
-        ) : (
-          <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: theme.textMuted }}>
-            No card selected.
-          </div>
+      {/* Scrollable list */}
+      <div style={{ overflowY: 'auto', flex: 1 }}>
+        {visible.length === 0 && (
+          <div style={{ padding: 32, color: theme.textMuted, fontSize: 13, textAlign: 'center' }}>No cards match filters.</div>
         )}
+        {visible.map(c => (
+          <CardRow key={c.uid} card={c} project={project} theme={theme}
+            selected={c.uid === selectedUid}
+            onClick={() => { setSelectedUid(c.uid); if (isMobile) setMobilePanel('editor'); }} />
+        ))}
       </div>
+    </div>
+  );
+
+  const editorPanel = (
+    <div style={{ overflowY: 'auto', height: '100%' }}>
+      {isMobile && (
+        <div style={{ padding: '10px 16px', borderBottom: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <window.Button theme={theme} variant="ghost" size="sm" onClick={() => setMobilePanel('list')}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Cards
+          </window.Button>
+        </div>
+      )}
+      {selected ? (
+        <CardEditForm
+          key={selected.uid}
+          card={selected}
+          project={project}
+          allCards={cards}
+          theme={theme}
+          onUpdate={handleUpdate}
+          onApiSave={handleApiSave}
+          onDelete={() => handleDelete(selected.uid)}
+        />
+      ) : (
+        <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: theme.textMuted }}>
+          No card selected.
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{
+      display: isMobile ? 'block' : 'grid',
+      gridTemplateColumns: isMobile ? undefined : '420px 1fr',
+      height: '100%', minHeight: 0,
+    }}>
+      {isMobile ? (
+        mobilePanel === 'list' ? listPanel : editorPanel
+      ) : (
+        <>{listPanel}{editorPanel}</>
+      )}
 
       {showImport && (
         <window.ImportModal

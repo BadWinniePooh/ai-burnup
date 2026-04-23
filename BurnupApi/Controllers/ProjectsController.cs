@@ -70,6 +70,33 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
     public async Task<IActionResult> Delete(string id) =>
         await store.DeleteProjectAsync(id) ? NoContent() : NotFound();
 
+    // ── Snapshots ────────────────────────────────────────────────────
+
+    [HttpPost("{id}/snapshots")]
+    public async Task<IActionResult> ImportSnapshots(string id, [FromBody] List<ImportSnapshotRow> rows)
+    {
+        if (await store.GetProjectAsync(id) is null) return NotFound();
+
+        var snapshots = rows
+            .Where(r => DateOnly.TryParse(r.Date, out _))
+            .Select(r => {
+                DateOnly.TryParse(r.Date, out var date);
+                return new DailySnapshot
+                {
+                    ProjectId  = id,
+                    Date       = date,
+                    ScopeCount = r.ScopeCount,
+                    DoneCount  = r.DoneCount,
+                    ScopeDays  = Math.Round(r.ScopeDays, 1),
+                    DoneDays   = Math.Round(r.DoneDays,  1),
+                };
+            })
+            .ToList();
+
+        await store.UpsertSnapshotsAsync(id, snapshots);
+        return Ok(new { imported = snapshots.Count });
+    }
+
     // ── Burnup ───────────────────────────────────────────────────────
 
     [HttpGet("{id}/burnup")]

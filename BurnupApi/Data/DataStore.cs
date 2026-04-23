@@ -88,6 +88,31 @@ public class DataStore(BurnupDbContext db)
     public Task<List<DailySnapshot>> GetSnapshotsAsync(string projectId) =>
         db.Snapshots.Where(s => s.ProjectId == projectId).OrderBy(s => s.Date).ToListAsync();
 
+    public async Task UpsertSnapshotsAsync(string projectId, List<DailySnapshot> snapshots)
+    {
+        var dates = snapshots.Select(s => s.Date).ToHashSet();
+        var existing = await db.Snapshots
+            .Where(s => s.ProjectId == projectId && dates.Contains(s.Date))
+            .ToListAsync();
+        var existingByDate = existing.ToDictionary(s => s.Date);
+
+        foreach (var s in snapshots)
+        {
+            if (existingByDate.TryGetValue(s.Date, out var row))
+            {
+                row.ScopeCount = s.ScopeCount;
+                row.DoneCount  = s.DoneCount;
+                row.ScopeDays  = s.ScopeDays;
+                row.DoneDays   = s.DoneDays;
+            }
+            else
+            {
+                db.Snapshots.Add(s);
+            }
+        }
+        await db.SaveChangesAsync();
+    }
+
     public async Task EnsurePastSnapshotsAsync(string projectId, List<Card> cards, DateOnly from, DateOnly through)
     {
         if (through < from) return;
