@@ -17,15 +17,19 @@ public class CardsController(DataStore store) : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? projectId = null)
     {
-        var cards = await store.GetCardsAsync(projectId);
-        return Ok(await Task.WhenAll(cards.Select(c => ToResponseAsync(c, store))));
+        var cards    = await store.GetCardsAsync(projectId);
+        var projects = await store.GetProjectsAsync();
+        var lookup   = projects.ToDictionary(p => p.Id);
+        return Ok(cards.Select(c => ToResponse(c, lookup.GetValueOrDefault(c.ProjectId))));
     }
 
     [HttpGet("{uid}")]
     public async Task<IActionResult> Get(string uid)
     {
         var card = await store.GetCardAsync(uid);
-        return card is null ? NotFound() : Ok(await ToResponseAsync(card, store));
+        if (card is null) return NotFound();
+        var project = await store.GetProjectAsync(card.ProjectId);
+        return Ok(ToResponse(card, project));
     }
 
     [HttpPost]
@@ -60,7 +64,8 @@ public class CardsController(DataStore store) : ControllerBase
         };
 
         await store.AddCardAsync(card);
-        return CreatedAtAction(nameof(Get), new { uid = card.Uid }, await ToResponseAsync(card, store));
+        var project = await store.GetProjectAsync(card.ProjectId);
+        return CreatedAtAction(nameof(Get), new { uid = card.Uid }, ToResponse(card, project));
     }
 
     [HttpPut("{uid}")]
@@ -93,7 +98,8 @@ public class CardsController(DataStore store) : ControllerBase
         };
 
         await store.UpdateCardAsync(updated);
-        return Ok(await ToResponseAsync(updated, store));
+        var project = await store.GetProjectAsync(updated.ProjectId);
+        return Ok(ToResponse(updated, project));
     }
 
     [HttpDelete("{uid}")]
@@ -102,9 +108,8 @@ public class CardsController(DataStore store) : ControllerBase
 
     // ── Helpers ───────────────────────────────────────────────────
 
-    private static async Task<CardResponse> ToResponseAsync(Card card, DataStore store)
+    private static CardResponse ToResponse(Card card, Project? project)
     {
-        var project   = await store.GetProjectAsync(card.ProjectId);
         var displayId = project is not null ? DomainService.GetDisplayId(card, project) : $"???-{card.CardNumber:D3}";
         return new CardResponse(
             Uid:            card.Uid,
