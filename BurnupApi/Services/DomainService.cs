@@ -33,7 +33,7 @@ public static class DomainService
             {
                 doneCount++;
                 var from = c.StartedDate ?? c.CreatedDate;
-                doneDays += Math.Max(0.5, c.EndDate.Value.DayNumber - from.DayNumber);
+                doneDays += Math.Max(0.5, WorkdayCalculator.CountWorkdays(from, c.EndDate.Value));
             }
         }
         return (scopeCount, scopeDays, doneCount, doneDays);
