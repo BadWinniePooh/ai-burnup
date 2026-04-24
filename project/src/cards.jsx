@@ -17,7 +17,7 @@ function cardToRequest(card) {
   };
 }
 
-function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUid }) {
+function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUid, readOnly = false }) {
   const filtered = cards.filter(c => c.projectId === project.id);
   const [typeFilter,   setTypeFilter]   = React.useState('all');
   const [scopeFilter,  setScopeFilter]  = React.useState('all');
@@ -124,15 +124,17 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
               {visible.length} of {filtered.length}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <window.Button theme={theme} variant="default" size="sm" onClick={() => setShowImport(true)}>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              Import
-            </window.Button>
-            <window.Button theme={theme} variant="primary" size="sm" onClick={handleNew}>
-              <span style={{ fontSize: 14, lineHeight: 1 }}>+</span> New card
-            </window.Button>
-          </div>
+          {!readOnly && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <window.Button theme={theme} variant="default" size="sm" onClick={() => setShowImport(true)}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Import
+              </window.Button>
+              <window.Button theme={theme} variant="primary" size="sm" onClick={handleNew}>
+                <span style={{ fontSize: 14, lineHeight: 1 }}>+</span> New card
+              </window.Button>
+            </div>
+          )}
         </div>
 
         <window.Input theme={theme} placeholder="Search by ID or title…" value={query} onChange={e => setQuery(e.target.value)}
@@ -192,6 +194,7 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
           onUpdate={handleUpdate}
           onApiSave={handleApiSave}
           onDelete={() => handleDelete(selected.uid)}
+          readOnly={readOnly}
         />
       ) : (
         <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: theme.textMuted }}>
@@ -282,7 +285,7 @@ function CardRow({ card, project, theme, selected, onClick }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-function CardEditForm({ card, project, allCards, theme, onUpdate, onApiSave, onDelete }) {
+function CardEditForm({ card, project, allCards, theme, onUpdate, onApiSave, onDelete, readOnly = false }) {
   const [local, setLocal] = React.useState(card);
   const saveTimer = React.useRef(null);
 
@@ -335,7 +338,7 @@ function CardEditForm({ card, project, allCards, theme, onUpdate, onApiSave, onD
           <window.TypeGlyph type={local.type} size={24} theme={theme} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 11, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace', letterSpacing: '0.06em' }}>
-              {displayId} · EDITING
+              {displayId} · {readOnly ? 'VIEWING' : 'EDITING'}
             </div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: theme.textMuted, marginTop: 2 }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: status.color }}></span>
@@ -343,12 +346,14 @@ function CardEditForm({ card, project, allCards, theme, onUpdate, onApiSave, onD
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {canStart    && <window.Button theme={theme} size="sm" onClick={() => updateNow({ startedDate: window.TODAY })}>Start</window.Button>}
-          {canComplete && <window.Button theme={theme} size="sm" variant="accent" onClick={() => updateNow({ endDate: window.TODAY })}>Mark done</window.Button>}
-          {local.endDate && <window.Button theme={theme} size="sm" onClick={() => updateNow({ endDate: null })}>Reopen</window.Button>}
-          <window.Button theme={theme} size="sm" variant="danger" onClick={onDelete} title="Delete card">Delete</window.Button>
-        </div>
+        {!readOnly && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            {canStart    && <window.Button theme={theme} size="sm" onClick={() => updateNow({ startedDate: window.TODAY })}>Start</window.Button>}
+            {canComplete && <window.Button theme={theme} size="sm" variant="accent" onClick={() => updateNow({ endDate: window.TODAY })}>Mark done</window.Button>}
+            {local.endDate && <window.Button theme={theme} size="sm" onClick={() => updateNow({ endDate: null })}>Reopen</window.Button>}
+            <window.Button theme={theme} size="sm" variant="danger" onClick={onDelete} title="Delete card">Delete</window.Button>
+          </div>
+        )}
       </div>
 
       {/* Title */}

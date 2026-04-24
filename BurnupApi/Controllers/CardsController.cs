@@ -18,13 +18,13 @@ public class CardsController(DataStore store) : ControllerBase
     private static readonly string[] ValidUnits  = ["days", "points"];
 
     private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
-    private bool IsAdmin       => User.IsInRole("admin");
+    private bool IsSysAdmin    => User.IsInRole("admin");
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? projectId = null)
     {
         if (projectId is not null &&
-            await store.GetProjectForUserAsync(projectId, CurrentUserId, IsAdmin) is null)
+            await store.GetProjectRoleAsync(projectId, CurrentUserId, IsSysAdmin) is null)
             return NotFound();
 
         var cards    = await store.GetCardsAsync(projectId);
@@ -38,7 +38,7 @@ public class CardsController(DataStore store) : ControllerBase
     {
         var card = await store.GetCardAsync(uid);
         if (card is null) return NotFound();
-        if (await store.GetProjectForUserAsync(card.ProjectId, CurrentUserId, IsAdmin) is null)
+        if (await store.GetProjectRoleAsync(card.ProjectId, CurrentUserId, IsSysAdmin) is null)
             return NotFound();
         var project = await store.GetProjectAsync(card.ProjectId);
         return Ok(ToResponse(card, project));
@@ -47,8 +47,9 @@ public class CardsController(DataStore store) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCardRequest req)
     {
-        if (await store.GetProjectForUserAsync(req.ProjectId, CurrentUserId, IsAdmin) is null)
-            return BadRequest($"Project '{req.ProjectId}' not found.");
+        var role = await store.GetProjectRoleAsync(req.ProjectId, CurrentUserId, IsSysAdmin);
+        if (role is null) return BadRequest($"Project '{req.ProjectId}' not found.");
+        if (!CanEdit(role)) return Forbid();
 
         if (ValidateCard(req.Type, req.Scope, req.EstimationUnit, req.CreatedDate, req.StartedDate, req.EndDate,
             out var error, out var created, out var started, out var ended))
@@ -85,8 +86,10 @@ public class CardsController(DataStore store) : ControllerBase
     {
         var existing = await store.GetCardAsync(uid);
         if (existing is null) return NotFound();
-        if (await store.GetProjectForUserAsync(existing.ProjectId, CurrentUserId, IsAdmin) is null)
-            return NotFound();
+
+        var role = await store.GetProjectRoleAsync(existing.ProjectId, CurrentUserId, IsSysAdmin);
+        if (role is null) return NotFound();
+        if (!CanEdit(role)) return Forbid();
 
         if (ValidateCard(req.Type, req.Scope, req.EstimationUnit, req.CreatedDate, req.StartedDate, req.EndDate,
             out var error, out var created, out var started, out var ended))
@@ -121,12 +124,17 @@ public class CardsController(DataStore store) : ControllerBase
     {
         var card = await store.GetCardAsync(uid);
         if (card is null) return NotFound();
-        if (await store.GetProjectForUserAsync(card.ProjectId, CurrentUserId, IsAdmin) is null)
-            return NotFound();
+
+        var role = await store.GetProjectRoleAsync(card.ProjectId, CurrentUserId, IsSysAdmin);
+        if (role is null) return NotFound();
+        if (!CanEdit(role)) return Forbid();
+
         return await store.DeleteCardAsync(uid) ? NoContent() : NotFound();
     }
 
     // ── Helpers ───────────────────────────────────────────────────
+
+    private static bool CanEdit(string role) => role is "owner" or "admin" or "editor";
 
     private static CardResponse ToResponse(Card card, Project? project)
     {

@@ -21,12 +21,29 @@ function parseHashRoute() {
   return { path, params };
 }
 
+function buildPublicUrl(token) {
+  return window.location.origin + window.location.pathname + '#/public-dashboard?token=' + token;
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+  document.body.appendChild(el);
+  el.select();
+  document.execCommand('copy');
+  document.body.removeChild(el);
+  return Promise.resolve();
+}
+
 function App() {
   // ── Auth state ────────────────────────────────────────────────
   const [currentUser, setCurrentUser] = React.useState(null);
   const [authChecked, setAuthChecked] = React.useState(false);
   const [authView,    setAuthView]    = React.useState('login');
   const [adminOpen,   setAdminOpen]   = React.useState(false);
+  const [shareProjectId, setShareProjectId] = React.useState(null);
 
   // Parse hash for password-reset / invite flows
   const hashRoute = React.useMemo(parseHashRoute, []);
@@ -179,6 +196,13 @@ function App() {
     setModalProject(null);
   };
 
+  // ── Public dashboard route ────────────────────────────────────
+
+  const publicToken = hashRoute.path === 'public-dashboard' ? hashRoute.params?.token : null;
+  if (publicToken) return (
+    <PublicDashboard token={publicToken} />
+  );
+
   // ── Auth gate ─────────────────────────────────────────────────
 
   if (!authChecked) return (
@@ -264,6 +288,7 @@ function App() {
         tweaks={tweaks} updateTweak={updateTweak}
         onNewProject={() => setModalProject({ mode: 'new' })}
         onEditProject={(p) => setModalProject({ mode: 'edit', project: p })}
+        onShareProject={(p) => setShareProjectId(p.id)}
         currentUser={currentUser} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount}
         onAdminOpen={() => setAdminOpen(true)}
       />
@@ -274,7 +299,8 @@ function App() {
         )}
         {view === 'cards' && (
           <window.CardsView project={project} cards={cards} setCards={setCards} theme={theme}
-            selectedUid={selectedCardUid} setSelectedUid={setSelectedCardUid} />
+            selectedUid={selectedCardUid} setSelectedUid={setSelectedCardUid}
+            readOnly={project?.userRole === 'viewer'} />
         )}
       </div>
 
@@ -290,11 +316,20 @@ function App() {
           onSave={handleSaveProject} onDelete={handleDeleteProject}
           onClose={() => setModalProject(null)} />
       )}
+
+      {shareProjectId && (
+        <ShareModal
+          theme={theme}
+          project={projects.find(p => p.id === shareProjectId)}
+          onClose={() => setShareProjectId(null)}
+          onProjectUpdate={(updated) => setProjects(ps => ps.map(p => p.id === updated.id ? updated : p))}
+        />
+      )}
     </div>
   );
 }
 
-function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak, onNewProject, onEditProject, currentUser, onLogout, onDeleteAccount, onAdminOpen }) {
+function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak, onNewProject, onEditProject, onShareProject, currentUser, onLogout, onDeleteAccount, onAdminOpen }) {
   const [pickerOpen,     setPickerOpen]     = React.useState(false);
   const [settingsOpen,   setSettingsOpen]   = React.useState(false);
   const [userMenuOpen,   setUserMenuOpen]   = React.useState(false);
@@ -362,15 +397,31 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
                       </div>
                       <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace' }}>{p.code}</span>
                     </button>
-                    <button onClick={() => { onEditProject(p); setPickerOpen(false); }} title="Edit project" style={{
-                      padding: 6, border: 'none', background: 'transparent',
-                      color: theme.textSubtle, borderRadius: 5, cursor: 'pointer',
-                      display: 'grid', placeItems: 'center', flexShrink: 0,
-                    }}>
-                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                        <path d="M9.5 1.5l2 2-7 7H2.5v-2l7-7z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-                      </svg>
-                    </button>
+                    {(p.userRole === 'owner' || p.userRole === 'admin') && (
+                      <button onClick={() => { onShareProject(p); setPickerOpen(false); }} title="Share project" style={{
+                        padding: 6, border: 'none', background: 'transparent',
+                        color: theme.textSubtle, borderRadius: 5, cursor: 'pointer',
+                        display: 'grid', placeItems: 'center', flexShrink: 0,
+                      }}>
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                          <circle cx="10" cy="2.5" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+                          <circle cx="10" cy="10.5" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+                          <circle cx="3" cy="6.5" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+                          <path d="M4.4 5.7L8.6 3.3M4.4 7.3l4.2 2.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                        </svg>
+                      </button>
+                    )}
+                    {(p.userRole === 'owner' || p.userRole === 'admin' || p.userRole === 'editor') && (
+                      <button onClick={() => { onEditProject(p); setPickerOpen(false); }} title="Edit project" style={{
+                        padding: 6, border: 'none', background: 'transparent',
+                        color: theme.textSubtle, borderRadius: 5, cursor: 'pointer',
+                        display: 'grid', placeItems: 'center', flexShrink: 0,
+                      }}>
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                          <path d="M9.5 1.5l2 2-7 7H2.5v-2l7-7z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 ))}
                 <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }}></div>
@@ -762,6 +813,316 @@ function SettingsModal({ theme, tweaks, updateTweak, onClose }) {
           }}>Reset to defaults</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Share Modal ───────────────────────────────────────────────────────────────
+
+function ShareModal({ theme, project, onClose, onProjectUpdate }) {
+  const [shares,       setShares]       = React.useState([]);
+  const [loading,      setLoading]      = React.useState(true);
+  const [publicLink,   setPublicLink]   = React.useState(project?.publicToken ? buildPublicUrl(project.publicToken) : null);
+  const [togglingLink, setTogglingLink] = React.useState(false);
+  const [newEmail,     setNewEmail]     = React.useState('');
+  const [newRole,      setNewRole]      = React.useState('viewer');
+  const [adding,       setAdding]       = React.useState(false);
+  const [error,        setError]        = React.useState(null);
+  const [copied,       setCopied]       = React.useState(false);
+
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  React.useEffect(() => {
+    if (!project) return;
+    window.api.shares.list(project.id)
+      .then(setShares)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [project?.id]);
+
+  const handleTogglePublicLink = async () => {
+    setTogglingLink(true);
+    try {
+      if (publicLink) {
+        await window.api.shares.disablePublicLink(project.id);
+        setPublicLink(null);
+        onProjectUpdate({ ...project, publicToken: null });
+      } else {
+        const { token } = await window.api.shares.enablePublicLink(project.id);
+        const url = buildPublicUrl(token);
+        setPublicLink(url);
+        onProjectUpdate({ ...project, publicToken: token });
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setTogglingLink(false);
+    }
+  };
+
+  const handleCopyLink = () => {
+    copyToClipboard(publicLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+
+  const handleAddShare = async () => {
+    if (!newEmail.trim()) return;
+    setAdding(true);
+    setError(null);
+    try {
+      const share = await window.api.shares.add(project.id, newEmail.trim(), newRole);
+      setShares(prev => [...prev, share]);
+      setNewEmail('');
+      setNewRole('viewer');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleUpdateRole = async (shareId, role) => {
+    try {
+      await window.api.shares.update(project.id, shareId, role);
+      setShares(prev => prev.map(s => s.id === shareId ? { ...s, role } : s));
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleRemoveShare = async (shareId) => {
+    try {
+      await window.api.shares.remove(project.id, shareId);
+      setShares(prev => prev.filter(s => s.id !== shareId));
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  if (!project) return null;
+
+  const inputStyle = {
+    padding: '7px 10px', border: `1px solid ${theme.border}`, borderRadius: 7,
+    background: theme.bg, color: theme.text, fontSize: 12.5,
+    fontFamily: 'inherit', outline: 'none', width: '100%', boxSizing: 'border-box',
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
+      <div style={{
+        position: 'relative', zIndex: 1,
+        background: theme.surface, border: `1px solid ${theme.borderStrong}`,
+        borderRadius: 12, width: 460, padding: 24, color: theme.text,
+        fontFamily: 'Inter, system-ui, sans-serif',
+        boxShadow: theme.dark ? '0 24px 80px rgba(0,0,0,0.6)' : '0 24px 80px rgba(0,0,0,0.14)',
+        maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>Share "{project.name}"</div>
+            <div style={{ fontSize: 11.5, color: theme.textMuted, marginTop: 2 }}>Manage access and sharing</div>
+          </div>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: theme.textMuted, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4, borderRadius: 4 }}>✕</button>
+        </div>
+
+        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+          {/* Public link section */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+              Public dashboard link
+            </div>
+            <div style={{ padding: 14, border: `1px solid ${theme.border}`, borderRadius: 8, background: theme.dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: publicLink ? 10 : 0 }}>
+                <div style={{ fontSize: 13 }}>
+                  {publicLink ? 'Anyone with the link can view this dashboard' : 'Share a read-only dashboard publicly'}
+                </div>
+                <button onClick={handleTogglePublicLink} disabled={togglingLink} style={{
+                  padding: '5px 12px', border: 'none', borderRadius: 6, cursor: 'pointer',
+                  background: publicLink ? theme.danger : theme.accent, color: '#fff',
+                  fontSize: 12, fontFamily: 'inherit', fontWeight: 500, flexShrink: 0, marginLeft: 12,
+                }}>
+                  {togglingLink ? '…' : publicLink ? 'Disable' : 'Enable'}
+                </button>
+              </div>
+              {publicLink && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input readOnly value={publicLink} onClick={e => e.target.select()} style={{
+                    ...inputStyle, flex: 1, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11.5, color: theme.textMuted,
+                  }} />
+                  <button onClick={handleCopyLink} style={{
+                    padding: '7px 14px', border: `1px solid ${theme.border}`, borderRadius: 7,
+                    background: copied ? theme.accentSoft : theme.surface, color: copied ? theme.accent : theme.textMuted,
+                    cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 500, flexShrink: 0,
+                  }}>
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Team access section */}
+          <div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+              Team access
+            </div>
+
+            {/* Add person form */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <input
+                type="email"
+                placeholder="Email address"
+                value={newEmail}
+                onChange={e => setNewEmail(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddShare()}
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <select value={newRole} onChange={e => setNewRole(e.target.value)} style={{
+                ...inputStyle, width: 'auto', flexShrink: 0, cursor: 'pointer',
+              }}>
+                <option value="viewer">Viewer</option>
+                <option value="editor">Editor</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button onClick={handleAddShare} disabled={adding || !newEmail.trim()} style={{
+                padding: '7px 14px', border: 'none', borderRadius: 7,
+                background: theme.accent, color: '#fff', cursor: 'pointer',
+                fontSize: 12.5, fontFamily: 'inherit', fontWeight: 500, flexShrink: 0,
+                opacity: adding || !newEmail.trim() ? 0.5 : 1,
+              }}>
+                {adding ? 'Adding…' : 'Add'}
+              </button>
+            </div>
+
+            {/* Shares list */}
+            {loading ? (
+              <div style={{ padding: '12px 0', color: theme.textMuted, fontSize: 13 }}>Loading…</div>
+            ) : shares.length === 0 ? (
+              <div style={{ padding: '12px 0', color: theme.textSubtle, fontSize: 12.5, fontStyle: 'italic' }}>
+                No one else has access yet.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {shares.map(s => (
+                  <div key={s.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 10px', borderRadius: 7,
+                    background: theme.dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
+                  }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: '50%', background: theme.accent,
+                      display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 600,
+                      color: '#fff', flexShrink: 0,
+                    }}>{s.email?.[0]?.toUpperCase() ?? '?'}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.email}</div>
+                    </div>
+                    <select
+                      value={s.role}
+                      onChange={e => handleUpdateRole(s.id, e.target.value)}
+                      style={{
+                        padding: '4px 8px', border: `1px solid ${theme.border}`, borderRadius: 5,
+                        background: theme.surface, color: theme.text, fontSize: 11.5,
+                        fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0,
+                      }}
+                    >
+                      <option value="viewer">Viewer</option>
+                      <option value="editor">Editor</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <button onClick={() => handleRemoveShare(s.id)} style={{
+                      width: 26, height: 26, border: `1px solid ${theme.border}`, borderRadius: 5,
+                      background: 'transparent', color: theme.danger, cursor: 'pointer',
+                      display: 'grid', placeItems: 'center', flexShrink: 0,
+                    }}>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 3h8M5 3V2h2v1M4.5 5v4M7.5 5v4M3 3l.5 7h5l.5-7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div style={{ marginTop: 12, fontSize: 12, color: theme.danger, padding: '8px 10px', borderRadius: 6, background: `color-mix(in oklch, ${theme.danger} 10%, transparent)` }}>
+            {error}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Public Dashboard ──────────────────────────────────────────────────────────
+
+function PublicDashboard({ token }) {
+  const [project,  setProject]  = React.useState(null);
+  const [series,   setSeries]   = React.useState(null);
+  const [cards,    setCards]    = React.useState([]);
+  const [loading,  setLoading]  = React.useState(true);
+  const [notFound, setNotFound] = React.useState(false);
+
+  React.useEffect(() => {
+    Promise.all([
+      window.api.public.getProject(token),
+      window.api.public.getBurnup(token),
+      window.api.public.getCards(token),
+    ]).then(([proj, burnup, cs]) => {
+      setProject(proj);
+      setSeries(burnup);
+      setCards(cs);
+    }).catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  const theme = {
+    bg: '#faf8f4', surface: '#ffffff', surfaceElev: '#ffffff',
+    border: 'rgba(30,25,20,0.08)', borderStrong: 'rgba(30,25,20,0.16)',
+    text: '#17150f', textMuted: 'rgba(23,21,15,0.58)', textSubtle: 'rgba(23,21,15,0.38)',
+    accent: 'oklch(0.62 0.15 258)', accentSoft: 'color-mix(in oklch, oklch(0.62 0.15 258) 14%, transparent)',
+    danger: 'oklch(0.55 0.18 25)', success: 'oklch(0.58 0.14 155)', dark: false,
+    typeHues: { feature: 258, bug: 25, 'no-code': 155, tiny: 62 },
+    scopeHues: { mvp: 258, mlp: 178, other: 62 },
+  };
+
+  if (loading) return (
+    <div style={{ height: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'Inter, system-ui, sans-serif', background: theme.bg, color: theme.textSubtle, fontSize: 13 }}>
+      Loading…
+    </div>
+  );
+
+  if (notFound) return (
+    <div style={{ height: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'Inter, system-ui, sans-serif', background: theme.bg, textAlign: 'center' }}>
+      <div>
+        <div style={{ fontSize: 18, fontWeight: 600, color: theme.text, marginBottom: 8 }}>Dashboard not found</div>
+        <div style={{ fontSize: 13, color: theme.textMuted }}>This link may have been disabled or is invalid.</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: '100vh', background: theme.bg, fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif', color: theme.text }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 24px', borderBottom: `1px solid ${theme.border}`, background: theme.surface }}>
+        <div style={{ width: 20, height: 20, borderRadius: 5, background: theme.text, display: 'grid', placeItems: 'center' }}>
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+            <path d="M1 10 L4 6 L7 8 L11 2" stroke={theme.bg} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <span style={{ fontWeight: 600, fontSize: 14 }}>Burnup</span>
+        <span style={{ color: theme.textSubtle, fontSize: 13 }}>· Public Dashboard · {project?.name}</span>
+        <div style={{ marginLeft: 'auto', fontSize: 11.5, color: theme.textSubtle }}>Read-only view</div>
+      </div>
+      <window.Dashboard project={project} cards={cards} theme={theme} chartStyle="area" externalSeries={series} />
     </div>
   );
 }

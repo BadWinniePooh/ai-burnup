@@ -75,4 +75,21 @@ window.api = {
   // Snapshot import
   importSnapshots: (projectId, rows) =>
     apiFetch(`/api/projects/${enc(projectId)}/snapshots`, { method: 'POST', body: JSON.stringify(rows) }),
+
+  // Project shares
+  shares: {
+    list:              (projectId)            => apiFetch(`/api/projects/${enc(projectId)}/shares`),
+    add:               (projectId, email, role) => apiFetch(`/api/projects/${enc(projectId)}/shares`, { method: 'POST', body: JSON.stringify({ email, role }) }),
+    update:            (projectId, shareId, role) => apiFetch(`/api/projects/${enc(projectId)}/shares/${shareId}`, { method: 'PUT', body: JSON.stringify({ role }) }),
+    remove:            (projectId, shareId)   => apiFetch(`/api/projects/${enc(projectId)}/shares/${shareId}`, { method: 'DELETE' }),
+    enablePublicLink:  (projectId)            => apiFetch(`/api/projects/${enc(projectId)}/shares/public-link`, { method: 'POST' }),
+    disablePublicLink: (projectId)            => apiFetch(`/api/projects/${enc(projectId)}/shares/public-link`, { method: 'DELETE' }),
+  },
+
+  // Public (unauthenticated) endpoints
+  public: {
+    getProject: (token) => apiFetch(`/api/public/${enc(token)}`),
+    getBurnup:  (token) => apiFetch(`/api/public/${enc(token)}/burnup`),
+    getCards:   (token) => apiFetch(`/api/public/${enc(token)}/cards`),
+  },
 };

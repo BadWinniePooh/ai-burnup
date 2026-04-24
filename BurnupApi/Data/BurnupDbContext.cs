@@ -12,6 +12,7 @@ public class BurnupDbContext(DbContextOptions<BurnupDbContext> options) : DbCont
     public DbSet<PasswordResetToken> ResetTokens    => Set<PasswordResetToken>();
     public DbSet<Invite>             Invites        => Set<Invite>();
     public DbSet<AppConfig>          AppConfigs     => Set<AppConfig>();
+    public DbSet<ProjectShare>       ProjectShares  => Set<ProjectShare>();
 
     protected override void OnModelCreating(ModelBuilder mb)
     {
@@ -52,6 +53,12 @@ public class BurnupDbContext(DbContextOptions<BurnupDbContext> options) : DbCont
         {
             e.ToTable("app_config");
             e.HasKey(c => c.Key);
+        });
+
+        mb.Entity<ProjectShare>(e =>
+        {
+            e.ToTable("project_shares");
+            e.HasIndex(s => new { s.ProjectId, s.UserId }).IsUnique();
         });
     }
 }

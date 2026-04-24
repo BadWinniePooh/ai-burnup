@@ -5,8 +5,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BurnupApi.Data;
 
-// EF Core-backed data store. Registered as Scoped so each request gets
-// its own DbContext instance (required by EF Core).
 public class DataStore(BurnupDbContext db)
 {
     private static readonly PasswordHasher<User> Hasher = new();
@@ -21,6 +19,9 @@ public class DataStore(BurnupDbContext db)
 
     public Task<List<User>> GetAllUsersAsync() =>
         db.Users.OrderBy(u => u.CreatedAt).ToListAsync();
+
+    public Task<List<User>> GetUsersByIdsAsync(List<int> ids) =>
+        db.Users.Where(u => ids.Contains(u.Id)).ToListAsync();
 
     public async Task<User> CreateUserAsync(string email, string password, string role = "user")
     {
@@ -46,12 +47,22 @@ public class DataStore(BurnupDbContext db)
         var user = await db.Users.FindAsync(id);
         if (user is null) return;
 
-        // Cascade: delete all projects (with cards + snapshots) owned by this user
+        // Remove shares granted to this user
+        db.ProjectShares.RemoveRange(
+            await db.ProjectShares.Where(s => s.UserId == id).ToListAsync());
+
+        // Cascade: delete all projects (with cards + snapshots + shares) owned by this user
         var projects = await db.Projects.Where(p => p.UserId == id).ToListAsync();
-        foreach (var p in projects)
+        if (projects.Count > 0)
         {
-            db.Snapshots.RemoveRange(await db.Snapshots.Where(s => s.ProjectId == p.Id).ToListAsync());
-            db.Cards    .RemoveRange(await db.Cards    .Where(c => c.ProjectId == p.Id).ToListAsync());
+            var projectIds = projects.Select(p => p.Id).ToList();
+            db.ProjectShares.RemoveRange(
+                await db.ProjectShares.Where(s => projectIds.Contains(s.ProjectId)).ToListAsync());
+            foreach (var p in projects)
+            {
+                db.Snapshots.RemoveRange(await db.Snapshots.Where(s => s.ProjectId == p.Id).ToListAsync());
+                db.Cards    .RemoveRange(await db.Cards    .Where(c => c.ProjectId == p.Id).ToListAsync());
+            }
         }
         db.Projects.RemoveRange(projects);
         db.Users   .Remove(user);
@@ -62,7 +73,6 @@ public class DataStore(BurnupDbContext db)
 
     public async Task<PasswordResetToken> CreateResetTokenAsync(int userId)
     {
-        // Invalidate any previous unexpired tokens for this user
         var old = await db.ResetTokens
             .Where(t => t.UserId == userId && !t.Used && t.ExpiresAt > DateTime.UtcNow)
             .ToListAsync();
@@ -138,31 +148,59 @@ public class DataStore(BurnupDbContext db)
 
     // ── Projects ──────────────────────────────────────────────────
 
-    // Visibility: admin sees own + unassigned; regular user sees own only.
-    public Task<List<Project>> GetProjectsAsync(int userId, bool isAdmin)
+    // Returns projects with the caller's effective role. One query for shares + one for projects.
+    public async Task<List<(Project Project, string Role)>> GetProjectsWithRolesAsync(int userId, bool isSysAdmin)
     {
+        var shareMap = await db.ProjectShares
+            .Where(s => s.UserId == userId)
+            .ToDictionaryAsync(s => s.ProjectId, s => s.Role);
+
+        var sharedIds = shareMap.Keys.ToList();
+
         var q = db.Projects.AsQueryable();
-        q = isAdmin
-            ? q.Where(p => p.UserId == userId || p.UserId == null)
-            : q.Where(p => p.UserId == userId);
-        return q.OrderBy(p => p.Name).ToListAsync();
+        q = isSysAdmin
+            ? q.Where(p => p.UserId == userId || p.UserId == null || sharedIds.Contains(p.Id))
+            : q.Where(p => p.UserId == userId || sharedIds.Contains(p.Id));
+
+        var projects = await q.OrderBy(p => p.Name).ToListAsync();
+
+        return projects.Select(p =>
+        {
+            string role = (p.UserId == userId || (isSysAdmin && p.UserId == null))
+                ? "owner"
+                : shareMap.GetValueOrDefault(p.Id, "viewer");
+            return (p, role);
+        }).ToList();
     }
 
     // Unfiltered — for internal use (snapshot worker, card lookup).
     public Task<List<Project>> GetAllProjectsAsync() =>
         db.Projects.OrderBy(p => p.Name).ToListAsync();
 
-    public async Task<Project?> GetProjectAsync(string id) =>
-        await db.Projects.FindAsync(id);
+    public Task<Project?> GetProjectAsync(string id) =>
+        db.Projects.FindAsync(id).AsTask();
 
-    // Returns the project only when the caller is allowed to see it.
-    public async Task<Project?> GetProjectForUserAsync(string id, int userId, bool isAdmin)
+    // Returns the project if the caller has any access (owner, shared, or sys-admin for unassigned).
+    public async Task<Project?> GetProjectForUserAsync(string id, int userId, bool isSysAdmin)
     {
         var p = await db.Projects.FindAsync(id);
         if (p is null) return null;
-        if (isAdmin  && (p.UserId == userId || p.UserId == null)) return p;
-        if (!isAdmin &&  p.UserId == userId) return p;
+        if (p.UserId == userId) return p;
+        if (isSysAdmin && p.UserId == null) return p;
+        if (await db.ProjectShares.AnyAsync(s => s.ProjectId == id && s.UserId == userId)) return p;
         return null;
+    }
+
+    // Returns "owner" | "admin" | "editor" | "viewer" | null (no access).
+    public async Task<string?> GetProjectRoleAsync(string id, int userId, bool isSysAdmin)
+    {
+        var p = await db.Projects.FindAsync(id);
+        if (p is null) return null;
+        if (p.UserId == userId) return "owner";
+        if (isSysAdmin && p.UserId == null) return "owner";
+        var share = await db.ProjectShares
+            .FirstOrDefaultAsync(s => s.ProjectId == id && s.UserId == userId);
+        return share?.Role;
     }
 
     public async Task<Project> AddProjectAsync(Project project)
@@ -185,14 +223,14 @@ public class DataStore(BurnupDbContext db)
     {
         var project = await db.Projects.FindAsync(id);
         if (project is null) return false;
-        db.Snapshots.RemoveRange(await db.Snapshots.Where(s => s.ProjectId == id).ToListAsync());
-        db.Cards    .RemoveRange(await db.Cards    .Where(c => c.ProjectId == id).ToListAsync());
-        db.Projects .Remove(project);
+        db.ProjectShares.RemoveRange(await db.ProjectShares.Where(s => s.ProjectId == id).ToListAsync());
+        db.Snapshots    .RemoveRange(await db.Snapshots    .Where(s => s.ProjectId == id).ToListAsync());
+        db.Cards        .RemoveRange(await db.Cards        .Where(c => c.ProjectId == id).ToListAsync());
+        db.Projects     .Remove(project);
         await db.SaveChangesAsync();
         return true;
     }
 
-    // Admin: assign (or unassign) a project to a user.
     public async Task<bool> AssignProjectAsync(string projectId, int? userId)
     {
         var project = await db.Projects.FindAsync(projectId);
@@ -215,6 +253,63 @@ public class DataStore(BurnupDbContext db)
     public Task<List<Project>> GetUnassignedProjectsAsync() =>
         db.Projects.Where(p => p.UserId == null).OrderBy(p => p.Name).ToListAsync();
 
+    // ── Project shares ────────────────────────────────────────────
+
+    public Task<List<ProjectShare>> GetSharesAsync(string projectId) =>
+        db.ProjectShares.Where(s => s.ProjectId == projectId).ToListAsync();
+
+    public async Task<ProjectShare?> AddShareAsync(string projectId, int userId, string role)
+    {
+        if (await db.ProjectShares.AnyAsync(s => s.ProjectId == projectId && s.UserId == userId))
+            return null; // already shared
+        var share = new ProjectShare { ProjectId = projectId, UserId = userId, Role = role, CreatedAt = DateTime.UtcNow };
+        db.ProjectShares.Add(share);
+        await db.SaveChangesAsync();
+        return share;
+    }
+
+    public async Task<bool> UpdateShareAsync(int shareId, string projectId, string role)
+    {
+        var share = await db.ProjectShares
+            .FirstOrDefaultAsync(s => s.Id == shareId && s.ProjectId == projectId);
+        if (share is null) return false;
+        share.Role = role;
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RemoveShareAsync(int shareId, string projectId)
+    {
+        var share = await db.ProjectShares
+            .FirstOrDefaultAsync(s => s.Id == shareId && s.ProjectId == projectId);
+        if (share is null) return false;
+        db.ProjectShares.Remove(share);
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    // ── Public sharing ────────────────────────────────────────────
+
+    public async Task<string> EnablePublicSharingAsync(string projectId)
+    {
+        var project = await db.Projects.FindAsync(projectId)
+            ?? throw new InvalidOperationException("Project not found.");
+        project.PublicToken = Guid.NewGuid().ToString("N");
+        await db.SaveChangesAsync();
+        return project.PublicToken;
+    }
+
+    public async Task DisablePublicSharingAsync(string projectId)
+    {
+        var project = await db.Projects.FindAsync(projectId);
+        if (project is null) return;
+        project.PublicToken = null;
+        await db.SaveChangesAsync();
+    }
+
+    public Task<Project?> GetProjectByPublicTokenAsync(string token) =>
+        db.Projects.FirstOrDefaultAsync(p => p.PublicToken == token);
+
     // ── Cards ─────────────────────────────────────────────────────
 
     public Task<List<Card>> GetCardsAsync(string? projectId = null)
@@ -224,8 +319,8 @@ public class DataStore(BurnupDbContext db)
         return q.OrderBy(c => c.CreatedDate).ThenBy(c => c.CardNumber).ToListAsync();
     }
 
-    public async Task<Card?> GetCardAsync(string uid) =>
-        await db.Cards.FindAsync(uid);
+    public Task<Card?> GetCardAsync(string uid) =>
+        db.Cards.FindAsync(uid).AsTask();
 
     public async Task<Card> AddCardAsync(Card card)
     {
