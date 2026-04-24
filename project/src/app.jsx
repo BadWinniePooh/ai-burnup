@@ -78,7 +78,7 @@ function App() {
     } catch { return TWEAK_DEFAULTS; }
   });
   const [editMode, setEditMode] = React.useState(false);
-  const [projectId, setProjectId] = React.useState(() => localStorage.getItem('burnup.projectId') || 'aurora');
+  const [projectId, setProjectId] = React.useState(() => localStorage.getItem('burnup.projectId') || null);
   const [view, setView] = React.useState(() => localStorage.getItem('burnup.view') || 'dashboard');
 
   const [projects, setProjects] = React.useState([]);

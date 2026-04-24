@@ -202,9 +202,6 @@ public class DataStore(BurnupDbContext db)
         return true;
     }
 
-    public Task<bool> ProjectIdExistsAsync(string id) =>
-        db.Projects.AnyAsync(p => p.Id == id);
-
     public Task<bool> ProjectNameExistsForUserAsync(string name, int userId, string? excludeId = null) =>
         db.Projects.AnyAsync(p => p.UserId == userId
             && p.Name.ToLower() == name.ToLower()

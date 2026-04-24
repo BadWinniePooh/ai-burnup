@@ -37,17 +37,21 @@ public static class SeedData
 
     public static (List<Project> Projects, List<Card> Cards) Generate()
     {
+        const string auroraId   = "d4a7f3c2-8b1e-4a9d-b6c5-2f3e8a1d7b9c";
+        const string harborId   = "e5b8a4d3-9c2f-4b0e-c7d6-3a4f9b2e8c0d";
+        const string meridianId = "f6c9b5e4-0d3a-4c1f-d8e7-4b5a0c3f9d1e";
+
         var projects = new List<Project>
         {
-            new() { Id = "aurora",   Name = "Aurora",   Code = "AUR", Description = "Internal analytics platform",    Color = "oklch(0.62 0.15 258)", StartDate = new DateOnly(2025, 9,  1)  },
-            new() { Id = "harbor",   Name = "Harbor",   Code = "HBR", Description = "Customer-facing payments API",   Color = "oklch(0.62 0.15 178)", StartDate = new DateOnly(2025, 11, 15) },
-            new() { Id = "meridian", Name = "Meridian", Code = "MRD", Description = "Mobile companion app",           Color = "oklch(0.68 0.14 62)",  StartDate = new DateOnly(2026, 1,  10) },
+            new() { Id = auroraId,   Name = "Aurora",   Code = "AUR", Description = "Internal analytics platform",    Color = "oklch(0.62 0.15 258)", StartDate = new DateOnly(2025, 9,  1)  },
+            new() { Id = harborId,   Name = "Harbor",   Code = "HBR", Description = "Customer-facing payments API",   Color = "oklch(0.62 0.15 178)", StartDate = new DateOnly(2025, 11, 15) },
+            new() { Id = meridianId, Name = "Meridian", Code = "MRD", Description = "Mobile companion app",           Color = "oklch(0.68 0.14 62)",  StartDate = new DateOnly(2026, 1,  10) },
         };
 
         var cards = new List<Card>();
-        cards.AddRange(GenCards("aurora",   24, 101, new DateOnly(2025, 9,  1),  8));
-        cards.AddRange(GenCards("harbor",   18, 202, new DateOnly(2025, 11, 15), 6));
-        cards.AddRange(GenCards("meridian", 21, 303, new DateOnly(2026, 1,  10), 5));
+        cards.AddRange(GenCards(auroraId,   24, 101, new DateOnly(2025, 9,  1),  8));
+        cards.AddRange(GenCards(harborId,   18, 202, new DateOnly(2025, 11, 15), 6));
+        cards.AddRange(GenCards(meridianId, 21, 303, new DateOnly(2026, 1,  10), 5));
 
         return (projects, cards);
     }

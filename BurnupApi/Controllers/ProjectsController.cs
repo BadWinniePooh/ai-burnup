@@ -40,16 +40,9 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
         if (await store.ProjectCodeExistsForUserAsync(code, CurrentUserId))
             return Conflict("You already have a project with that code.");
 
-        // Build a globally unique ID from the name slug; append a counter if
-        // another user already holds the same slug as their project ID.
-        var slug = req.Name.ToLowerInvariant().Replace(" ", "-");
-        var id   = slug;
-        for (var n = 2; await store.ProjectIdExistsAsync(id); n++)
-            id = $"{slug}-{n}";
-
         var project = new Project
         {
-            Id          = id,
+            Id          = Guid.NewGuid().ToString(),
             Name        = req.Name,
             Code        = code,
             Description = req.Description,
