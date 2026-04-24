@@ -33,15 +33,25 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
         if (!DateOnly.TryParse(req.StartDate, out var startDate))
             return BadRequest("StartDate must be yyyy-MM-dd.");
 
-        var id = req.Name.ToLowerInvariant().Replace(" ", "-");
-        if (await store.GetProjectAsync(id) is not null)
-            return Conflict($"A project with id '{id}' already exists.");
+        var code = req.Code.ToUpperInvariant();
+
+        if (await store.ProjectNameExistsForUserAsync(req.Name, CurrentUserId))
+            return Conflict("You already have a project with that name.");
+        if (await store.ProjectCodeExistsForUserAsync(code, CurrentUserId))
+            return Conflict("You already have a project with that code.");
+
+        // Build a globally unique ID from the name slug; append a counter if
+        // another user already holds the same slug as their project ID.
+        var slug = req.Name.ToLowerInvariant().Replace(" ", "-");
+        var id   = slug;
+        for (var n = 2; await store.ProjectIdExistsAsync(id); n++)
+            id = $"{slug}-{n}";
 
         var project = new Project
         {
             Id          = id,
             Name        = req.Name,
-            Code        = req.Code.ToUpperInvariant(),
+            Code        = code,
             Description = req.Description,
             Color       = req.Color,
             StartDate   = startDate,
@@ -61,11 +71,18 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
         if (!DateOnly.TryParse(req.StartDate, out var startDate))
             return BadRequest("StartDate must be yyyy-MM-dd.");
 
+        var code = req.Code.ToUpperInvariant();
+
+        if (await store.ProjectNameExistsForUserAsync(req.Name, existing.UserId ?? CurrentUserId, id))
+            return Conflict("You already have a project with that name.");
+        if (await store.ProjectCodeExistsForUserAsync(code, existing.UserId ?? CurrentUserId, id))
+            return Conflict("You already have a project with that code.");
+
         var updated = new Project
         {
             Id          = id,
             Name        = req.Name,
-            Code        = req.Code.ToUpperInvariant(),
+            Code        = code,
             Description = req.Description,
             Color       = req.Color,
             StartDate   = startDate,
