@@ -23,6 +23,15 @@ services:
       - ASPNETCORE_URLS=http://+:5000
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=burnup;Username=burnup;Password=burnup
+      - Jwt__Secret=${Jwt__Secret}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - AppUrl=${AppUrl}
+      - Smtp__Host=${Smtp__Host:-}
+      - Smtp__Port=${Smtp__Port:-587}
+      - Smtp__User=${Smtp__User:-}
+      - Smtp__Pass=${Smtp__Pass:-}
+      - Smtp__From=${Smtp__From:-noreply@burnup.app}
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:5000/health || exit 1"]
       interval: 5s
