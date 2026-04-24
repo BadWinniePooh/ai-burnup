@@ -68,6 +68,13 @@ function App() {
     setAuthView('login');
   };
 
+  const handleDeleteAccount = async () => {
+    await window.api.deleteMe();
+    localStorage.removeItem('burnup.token');
+    setCurrentUser(null);
+    setAuthView('login');
+  };
+
   const [tweaks, setTweaks] = React.useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('burnup.tweaks') || '{}');
@@ -257,7 +264,7 @@ function App() {
         tweaks={tweaks} updateTweak={updateTweak}
         onNewProject={() => setModalProject({ mode: 'new' })}
         onEditProject={(p) => setModalProject({ mode: 'edit', project: p })}
-        currentUser={currentUser} onLogout={handleLogout}
+        currentUser={currentUser} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount}
         onAdminOpen={() => setAdminOpen(true)}
       />
 
@@ -287,11 +294,14 @@ function App() {
   );
 }
 
-function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak, onNewProject, onEditProject, currentUser, onLogout, onAdminOpen }) {
-  const [pickerOpen,   setPickerOpen]   = React.useState(false);
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak, onNewProject, onEditProject, currentUser, onLogout, onDeleteAccount, onAdminOpen }) {
+  const [pickerOpen,     setPickerOpen]     = React.useState(false);
+  const [settingsOpen,   setSettingsOpen]   = React.useState(false);
+  const [userMenuOpen,   setUserMenuOpen]   = React.useState(false);
+  const [deleteConfirm,  setDeleteConfirm]  = React.useState(false);
   const initials = currentUser?.email?.[0]?.toUpperCase() ?? '?';
+
+  const closeUserMenu = () => { setUserMenuOpen(false); setDeleteConfirm(false); };
   return (
     <header style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -436,11 +446,11 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
           }}>{initials}</button>
           {userMenuOpen && (
             <>
-              <div onClick={() => setUserMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
+              <div onClick={closeUserMenu} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
               <div style={{
                 position: 'absolute', right: 0, top: 36, zIndex: 6,
                 background: theme.surface, border: `1px solid ${theme.border}`,
-                borderRadius: 8, width: 200, padding: 4,
+                borderRadius: 8, width: 210, padding: 4,
                 boxShadow: theme.dark ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.08)',
                 fontFamily: 'inherit',
               }}>
@@ -450,11 +460,28 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
                     <div style={{ fontSize: 10.5, color: theme.accent, marginTop: 1 }}>Administrator</div>
                   )}
                 </div>
-                <button onClick={() => { setUserMenuOpen(false); onLogout(); }} style={{
+                <button onClick={() => { closeUserMenu(); onLogout(); }} style={{
                   width: '100%', padding: '7px 12px', border: 'none', background: 'transparent',
-                  color: theme.danger, textAlign: 'left', cursor: 'pointer',
+                  color: theme.textMuted, textAlign: 'left', cursor: 'pointer',
                   fontSize: 12.5, fontFamily: 'inherit', borderRadius: 5,
                 }}>Sign out</button>
+                <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }} />
+                {deleteConfirm
+                  ? <div style={{ padding: '8px 12px' }}>
+                      <div style={{ fontSize: 12, color: theme.danger, marginBottom: 8 }}>
+                        Delete your account and all projects?
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <window.Button theme={theme} variant="danger" size="sm" onClick={onDeleteAccount}>Delete</window.Button>
+                        <window.Button theme={theme} variant="ghost"  size="sm" onClick={() => setDeleteConfirm(false)}>Cancel</window.Button>
+                      </div>
+                    </div>
+                  : <button onClick={() => setDeleteConfirm(true)} style={{
+                      width: '100%', padding: '7px 12px', border: 'none', background: 'transparent',
+                      color: theme.danger, textAlign: 'left', cursor: 'pointer',
+                      fontSize: 12.5, fontFamily: 'inherit', borderRadius: 5,
+                    }}>Delete account…</button>
+                }
               </div>
             </>
           )}

@@ -40,6 +40,7 @@ window.api = {
   forgotPassword:(email)                    => apiFetch('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
   resetPassword: (token, newPassword)       => apiFetch('/api/auth/reset-password',  { method: 'POST', body: JSON.stringify({ token, newPassword }) }),
   me:            ()                         => apiFetch('/api/auth/me'),
+  deleteMe:      ()                         => apiFetch('/api/auth/me', { method: 'DELETE' }),
 
   // Admin
   admin: {

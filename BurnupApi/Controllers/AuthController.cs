@@ -100,4 +100,13 @@ public class AuthController(DataStore store, JwtService jwt, EmailService email,
         if (user is null) return Unauthorized();
         return Ok(new UserResponse(user.Id, user.Email, user.Role, user.IsActive, user.CreatedAt));
     }
+
+    [Authorize]
+    [HttpDelete("me")]
+    public async Task<IActionResult> DeleteMe()
+    {
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
+        await store.DeleteUserAsync(userId);
+        return NoContent();
+    }
 }
