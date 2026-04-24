@@ -29,8 +29,9 @@ builder.Services.AddScoped<EmailService>();
 builder.Services.AddHostedService<SnapshotWorker>();
 
 // JWT authentication — secret must be provided via Jwt:Secret (env var JWT__Secret)
-var jwtSecret = builder.Configuration["Jwt:Secret"]
-    ?? throw new InvalidOperationException(
+var jwtSecret = builder.Configuration["Jwt:Secret"];
+if (string.IsNullOrWhiteSpace(jwtSecret))
+    throw new InvalidOperationException(
         "Jwt:Secret is not configured. Set the JWT__Secret environment variable.");
 
 builder.Services
