@@ -26,7 +26,7 @@ public class SnapshotWorker(IServiceScopeFactory scopeFactory, ILogger<SnapshotW
             using var scope = scopeFactory.CreateScope();
             var store       = scope.ServiceProvider.GetRequiredService<DataStore>();
             var yesterday   = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
-            var projects    = await store.GetProjectsAsync();
+            var projects    = await store.GetAllProjectsAsync();
 
             foreach (var project in projects)
             {

@@ -1,24 +1,34 @@
+using System.Security.Claims;
 using BurnupApi.Data;
 using BurnupApi.DTOs;
 using BurnupApi.Models;
 using BurnupApi.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BurnupApi.Controllers;
 
 [ApiController]
 [Route("api/cards")]
+[Authorize]
 public class CardsController(DataStore store) : ControllerBase
 {
     private static readonly string[] ValidTypes  = ["feature", "bug", "no-code", "tiny"];
     private static readonly string[] ValidScopes = ["mvp", "mlp", "other"];
     private static readonly string[] ValidUnits  = ["days", "points"];
 
+    private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
+    private bool IsAdmin       => User.IsInRole("admin");
+
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? projectId = null)
     {
+        if (projectId is not null &&
+            await store.GetProjectForUserAsync(projectId, CurrentUserId, IsAdmin) is null)
+            return NotFound();
+
         var cards    = await store.GetCardsAsync(projectId);
-        var projects = await store.GetProjectsAsync();
+        var projects = await store.GetAllProjectsAsync();
         var lookup   = projects.ToDictionary(p => p.Id);
         return Ok(cards.Select(c => ToResponse(c, lookup.GetValueOrDefault(c.ProjectId))));
     }
@@ -28,6 +38,8 @@ public class CardsController(DataStore store) : ControllerBase
     {
         var card = await store.GetCardAsync(uid);
         if (card is null) return NotFound();
+        if (await store.GetProjectForUserAsync(card.ProjectId, CurrentUserId, IsAdmin) is null)
+            return NotFound();
         var project = await store.GetProjectAsync(card.ProjectId);
         return Ok(ToResponse(card, project));
     }
@@ -35,7 +47,7 @@ public class CardsController(DataStore store) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCardRequest req)
     {
-        if (await store.GetProjectAsync(req.ProjectId) is null)
+        if (await store.GetProjectForUserAsync(req.ProjectId, CurrentUserId, IsAdmin) is null)
             return BadRequest($"Project '{req.ProjectId}' not found.");
 
         if (ValidateCard(req.Type, req.Scope, req.EstimationUnit, req.CreatedDate, req.StartedDate, req.EndDate,
@@ -73,6 +85,8 @@ public class CardsController(DataStore store) : ControllerBase
     {
         var existing = await store.GetCardAsync(uid);
         if (existing is null) return NotFound();
+        if (await store.GetProjectForUserAsync(existing.ProjectId, CurrentUserId, IsAdmin) is null)
+            return NotFound();
 
         if (ValidateCard(req.Type, req.Scope, req.EstimationUnit, req.CreatedDate, req.StartedDate, req.EndDate,
             out var error, out var created, out var started, out var ended))
@@ -103,8 +117,14 @@ public class CardsController(DataStore store) : ControllerBase
     }
 
     [HttpDelete("{uid}")]
-    public async Task<IActionResult> Delete(string uid) =>
-        await store.DeleteCardAsync(uid) ? NoContent() : NotFound();
+    public async Task<IActionResult> Delete(string uid)
+    {
+        var card = await store.GetCardAsync(uid);
+        if (card is null) return NotFound();
+        if (await store.GetProjectForUserAsync(card.ProjectId, CurrentUserId, IsAdmin) is null)
+            return NotFound();
+        return await store.DeleteCardAsync(uid) ? NoContent() : NotFound();
+    }
 
     // ── Helpers ───────────────────────────────────────────────────
 

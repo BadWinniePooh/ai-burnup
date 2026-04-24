@@ -12,7 +12,62 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "scopeHues": { "mvp": 258, "mlp": 178, "other": 62 }
 }/*EDITMODE-END*/;
 
+// Parse the URL hash for auth routes: #/reset-password?token=xxx or #/register?invite=xxx
+function parseHashRoute() {
+  const hash = window.location.hash.slice(1); // strip leading #
+  if (!hash.startsWith('/')) return {};
+  const [path, qs] = hash.slice(1).split('?');
+  const params = Object.fromEntries(new URLSearchParams(qs || ''));
+  return { path, params };
+}
+
 function App() {
+  // ── Auth state ────────────────────────────────────────────────
+  const [currentUser, setCurrentUser] = React.useState(null);
+  const [authChecked, setAuthChecked] = React.useState(false);
+  const [authView,    setAuthView]    = React.useState('login');
+  const [adminOpen,   setAdminOpen]   = React.useState(false);
+
+  // Parse hash for password-reset / invite flows
+  const hashRoute = React.useMemo(parseHashRoute, []);
+  const resetToken  = hashRoute.path === 'reset-password' ? hashRoute.params?.token  : null;
+  const inviteToken = hashRoute.path === 'register'       ? hashRoute.params?.invite : null;
+
+  React.useEffect(() => {
+    if (resetToken)  { setAuthView('reset');    return; }
+    if (inviteToken) { setAuthView('register'); return; }
+  }, []);
+
+  // Verify token on mount; handle 401 events from apiFetch
+  React.useEffect(() => {
+    const token = localStorage.getItem('burnup.token');
+    if (!token) { setAuthChecked(true); return; }
+    window.api.me()
+      .then(user => { setCurrentUser(user); setAuthChecked(true); })
+      .catch(() => { localStorage.removeItem('burnup.token'); setAuthChecked(true); });
+  }, []);
+
+  React.useEffect(() => {
+    const onUnauth = () => { setCurrentUser(null); setAuthView('login'); };
+    window.addEventListener('burnup:unauthorized', onUnauth);
+    return () => window.removeEventListener('burnup:unauthorized', onUnauth);
+  }, []);
+
+  const handleLogin = (authResp) => {
+    // Decode role from response and load user profile
+    window.api.me().then(user => {
+      setCurrentUser(user);
+      // Clear hash so the reset/invite token isn't reused
+      if (window.location.hash) window.history.replaceState(null, '', window.location.pathname);
+    }).catch(() => setCurrentUser({ email: authResp.email, role: authResp.role }));
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('burnup.token');
+    setCurrentUser(null);
+    setAuthView('login');
+  };
+
   const [tweaks, setTweaks] = React.useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('burnup.tweaks') || '{}');
@@ -31,10 +86,12 @@ function App() {
   const [loading, setLoading] = React.useState(true);
   const [apiError, setApiError] = React.useState(null);
   const [selectedCardUid, setSelectedCardUid] = React.useState(null);
-  const [modalProject, setModalProject] = React.useState(null); // null | { mode:'new' } | { mode:'edit', project }
+  const [modalProject, setModalProject] = React.useState(null);
 
-  // Load all projects once on mount
+  // Load projects once the user is authenticated
   React.useEffect(() => {
+    if (!currentUser) return;
+    setLoading(true);
     window.api.getProjects()
       .then(ps => {
         setProjects(ps);
@@ -42,7 +99,7 @@ function App() {
       })
       .catch(err => setApiError(err.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [currentUser]);
 
   // Re-load cards whenever the active project changes
   React.useEffect(() => {
@@ -115,6 +172,20 @@ function App() {
     setModalProject(null);
   };
 
+  // ── Auth gate ─────────────────────────────────────────────────
+
+  if (!authChecked) return (
+    <div style={{
+      height: '100vh', background: theme.bg, display: 'grid', placeItems: 'center',
+      fontFamily: 'Inter, system-ui, sans-serif', color: theme.textSubtle, fontSize: 13,
+    }}>Loading…</div>
+  );
+
+  if (!currentUser) return (
+    <window.AuthRouter theme={theme} authView={authView} setAuthView={setAuthView}
+      onLogin={handleLogin} inviteToken={inviteToken} resetToken={resetToken} />
+  );
+
   // ── Loading / error screens ───────────────────────────────────
 
   if (loading) return (
@@ -186,6 +257,8 @@ function App() {
         tweaks={tweaks} updateTweak={updateTweak}
         onNewProject={() => setModalProject({ mode: 'new' })}
         onEditProject={(p) => setModalProject({ mode: 'edit', project: p })}
+        currentUser={currentUser} onLogout={handleLogout}
+        onAdminOpen={() => setAdminOpen(true)}
       />
 
       <div style={{ flex: 1, minHeight: 0, overflowY: view === 'dashboard' ? 'auto' : 'hidden' }}>
@@ -200,6 +273,10 @@ function App() {
 
       {editMode && <TweaksPanel theme={theme} tweaks={tweaks} updateTweak={updateTweak} />}
 
+      {adminOpen && currentUser?.role === 'admin' && (
+        <window.AdminPanel theme={theme} currentUser={currentUser} onClose={() => setAdminOpen(false)} />
+      )}
+
       {modalProject && (
         <ProjectModal theme={theme}
           initialProject={modalProject.mode === 'edit' ? modalProject.project : {}}
@@ -210,9 +287,11 @@ function App() {
   );
 }
 
-function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak, onNewProject, onEditProject }) {
+function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak, onNewProject, onEditProject, currentUser, onLogout, onAdminOpen }) {
   const [pickerOpen,   setPickerOpen]   = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const initials = currentUser?.email?.[0]?.toUpperCase() ?? '?';
   return (
     <header style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -337,11 +416,49 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
             <circle cx="10" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
           </svg>
         </button>
-        <div style={{
-          width: 26, height: 26, borderRadius: '50%',
-          background: `linear-gradient(135deg, ${theme.accent}, oklch(0.62 0.15 ${((tweaks.accentHue + 60) % 360)}))`,
-          display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 600, color: '#fff',
-        }}>KR</div>
+        {currentUser?.role === 'admin' && (
+          <button onClick={onAdminOpen} title="Admin" style={{
+            width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
+            background: theme.surface, color: theme.textMuted, cursor: 'pointer',
+            display: 'grid', placeItems: 'center',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1L2 3.5v4c0 2.8 2.1 5.4 5 6 2.9-.6 5-3.2 5-6v-4L7 1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+        <div style={{ position: 'relative' }}>
+          <button onClick={() => setUserMenuOpen(v => !v)} title={currentUser?.email} style={{
+            width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
+            background: `linear-gradient(135deg, ${theme.accent}, oklch(0.62 0.15 ${((tweaks.accentHue + 60) % 360)}))`,
+            display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 600, color: '#fff',
+            outline: userMenuOpen ? `2px solid ${theme.accent}` : 'none', outlineOffset: 2,
+          }}>{initials}</button>
+          {userMenuOpen && (
+            <>
+              <div onClick={() => setUserMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
+              <div style={{
+                position: 'absolute', right: 0, top: 36, zIndex: 6,
+                background: theme.surface, border: `1px solid ${theme.border}`,
+                borderRadius: 8, width: 200, padding: 4,
+                boxShadow: theme.dark ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.08)',
+                fontFamily: 'inherit',
+              }}>
+                <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${theme.border}`, marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser?.email}</div>
+                  {currentUser?.role === 'admin' && (
+                    <div style={{ fontSize: 10.5, color: theme.accent, marginTop: 1 }}>Administrator</div>
+                  )}
+                </div>
+                <button onClick={() => { setUserMenuOpen(false); onLogout(); }} style={{
+                  width: '100%', padding: '7px 12px', border: 'none', background: 'transparent',
+                  color: theme.danger, textAlign: 'left', cursor: 'pointer',
+                  fontSize: 12.5, fontFamily: 'inherit', borderRadius: 5,
+                }}>Sign out</button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
       {settingsOpen && (
         <SettingsModal theme={theme} tweaks={tweaks} updateTweak={updateTweak}

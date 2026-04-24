@@ -1,22 +1,29 @@
+using System.Security.Claims;
 using BurnupApi.Data;
 using BurnupApi.DTOs;
 using BurnupApi.Models;
 using BurnupApi.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BurnupApi.Controllers;
 
 [ApiController]
 [Route("api/projects")]
+[Authorize]
 public class ProjectsController(DataStore store, BurnupService burnup) : ControllerBase
 {
+    private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
+    private bool IsAdmin       => User.IsInRole("admin");
+
     [HttpGet]
-    public async Task<IActionResult> GetAll() => Ok(await store.GetProjectsAsync());
+    public async Task<IActionResult> GetAll() =>
+        Ok(await store.GetProjectsAsync(CurrentUserId, IsAdmin));
 
     [HttpGet("{id}")]
     public async Task<IActionResult> Get(string id)
     {
-        var project = await store.GetProjectAsync(id);
+        var project = await store.GetProjectForUserAsync(id, CurrentUserId, IsAdmin);
         return project is null ? NotFound() : Ok(project);
     }
 
@@ -38,6 +45,7 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
             Description = req.Description,
             Color       = req.Color,
             StartDate   = startDate,
+            UserId      = CurrentUserId,
         };
 
         await store.AddProjectAsync(project);
@@ -47,7 +55,8 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, [FromBody] UpdateProjectRequest req)
     {
-        if (await store.GetProjectAsync(id) is null) return NotFound();
+        var existing = await store.GetProjectForUserAsync(id, CurrentUserId, IsAdmin);
+        if (existing is null) return NotFound();
 
         if (!DateOnly.TryParse(req.StartDate, out var startDate))
             return BadRequest("StartDate must be yyyy-MM-dd.");
@@ -60,6 +69,7 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
             Description = req.Description,
             Color       = req.Color,
             StartDate   = startDate,
+            UserId      = existing.UserId, // preserve ownership
         };
 
         await store.UpdateProjectAsync(updated);
@@ -67,15 +77,19 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(string id) =>
-        await store.DeleteProjectAsync(id) ? NoContent() : NotFound();
+    public async Task<IActionResult> Delete(string id)
+    {
+        var existing = await store.GetProjectForUserAsync(id, CurrentUserId, IsAdmin);
+        if (existing is null) return NotFound();
+        return await store.DeleteProjectAsync(id) ? NoContent() : NotFound();
+    }
 
     // ── Snapshots ────────────────────────────────────────────────────
 
     [HttpPost("{id}/snapshots")]
     public async Task<IActionResult> ImportSnapshots(string id, [FromBody] List<ImportSnapshotRow> rows)
     {
-        if (await store.GetProjectAsync(id) is null) return NotFound();
+        if (await store.GetProjectForUserAsync(id, CurrentUserId, IsAdmin) is null) return NotFound();
 
         var snapshots = rows
             .Where(r => DateOnly.TryParse(r.Date, out _))
@@ -102,7 +116,7 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
     [HttpGet("{id}/burnup")]
     public async Task<IActionResult> GetBurnup(string id, [FromQuery] string? today = null)
     {
-        var project = await store.GetProjectAsync(id);
+        var project = await store.GetProjectForUserAsync(id, CurrentUserId, IsAdmin);
         if (project is null) return NotFound();
 
         var todayDate = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -116,7 +130,7 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
         var cards = await store.GetCardsAsync(id);
         await store.EnsurePastSnapshotsAsync(id, cards, project.StartDate, todayDate.AddDays(-1));
         var snapshots = await store.GetSnapshotsAsync(id);
-        var series = burnup.BuildBurnup(snapshots, cards, project.StartDate, todayDate);
+        var series    = burnup.BuildBurnup(snapshots, cards, project.StartDate, todayDate);
         return Ok(series);
     }
 }

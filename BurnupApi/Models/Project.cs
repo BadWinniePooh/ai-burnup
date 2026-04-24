@@ -8,4 +8,5 @@ public class Project
     public string Description { get; set; } = string.Empty;
     public string Color { get; set; } = string.Empty;
     public DateOnly StartDate { get; set; }
+    public int?     UserId    { get; set; } // null = unassigned
 }
