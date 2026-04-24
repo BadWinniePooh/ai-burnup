@@ -181,11 +181,25 @@ function UsersTab({ theme, currentUser }) {
 
 // ── Invites ────────────────────────────────────────────────────────────────
 
+function copyToClipboard(text) {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  // Fallback for non-secure contexts (plain HTTP)
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+  document.body.appendChild(el);
+  el.select();
+  document.execCommand('copy');
+  document.body.removeChild(el);
+  return Promise.resolve();
+}
+
 function InvitesTab({ theme }) {
   const [invites, setInvites] = React.useState(null);
   const [email,   setEmail]   = React.useState('');
   const [error,   setError]   = React.useState(null);
   const [loading, setLoading] = React.useState(false);
+  const [copied,  setCopied]  = React.useState(null);
 
   React.useEffect(() => {
     window.api.admin.getInvites().then(setInvites).catch(e => setError(e.message));
@@ -236,11 +250,17 @@ function InvitesTab({ theme }) {
                   flex: 1, fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace',
                   color: theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>{link}</div>
-                <button onClick={() => navigator.clipboard.writeText(link)} style={{
-                  border: `1px solid ${theme.border}`, borderRadius: 5, padding: '3px 8px',
-                  fontSize: 11, background: theme.surface, color: theme.textMuted, cursor: 'pointer',
-                  fontFamily: 'inherit', flexShrink: 0,
-                }}>Copy</button>
+                <button onClick={() => copyToClipboard(link).then(() => {
+                    setCopied(i.id);
+                    setTimeout(() => setCopied(null), 2000);
+                  })} style={{
+                  border: `1px solid ${copied === i.id ? theme.success : theme.border}`,
+                  borderRadius: 5, padding: '3px 8px',
+                  fontSize: 11, background: theme.surface,
+                  color: copied === i.id ? theme.success : theme.textMuted,
+                  cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+                  transition: 'color 0.15s, border-color 0.15s',
+                }}>{copied === i.id ? 'Copied!' : 'Copy'}</button>
               </div>
             )}
           </div>
