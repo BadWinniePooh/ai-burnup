@@ -154,9 +154,8 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
         }
 
         var cards = await store.GetCardsAsync(id);
-        await store.EnsurePastSnapshotsAsync(id, cards, project.StartDate, todayDate.AddDays(-1));
-        var snapshots = await store.GetSnapshotsAsync(id);
-        var series    = burnup.BuildBurnup(snapshots, cards, project.StartDate, todayDate);
+        var snapshots = await store.EnsurePastSnapshotsAsync(id, cards, project.StartDate, todayDate.AddDays(-1));
+        var series = burnup.BuildBurnup(snapshots, cards, project.StartDate, todayDate);
         return Ok(series);
     }
 

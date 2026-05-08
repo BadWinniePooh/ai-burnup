@@ -20,6 +20,23 @@ public class CardsController(DataStore store) : ControllerBase
     private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
     private bool IsSysAdmin    => User.IsInRole("admin");
 
+    private static readonly CardResponse MissingProjectResponse = new(
+        Uid: string.Empty,
+        CardNumber: 0,
+        ProjectId: string.Empty,
+        DisplayId: "???-???",
+        Title: "???",
+        CreatedDate: "0000-00-00",
+        StartedDate: null,
+        EndDate: null,
+        Estimation: 0,
+        EstimationUnit: "days",
+        EstimationDays: 0,
+        Type: "unknown",
+        Scope: "unknown",
+        Status: "missing"
+    );
+
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? projectId = null)
     {
@@ -41,7 +58,7 @@ public class CardsController(DataStore store) : ControllerBase
         if (await store.GetProjectRoleAsync(card.ProjectId, CurrentUserId, IsSysAdmin) is null)
             return NotFound();
         var project = await store.GetProjectAsync(card.ProjectId);
-        return Ok(ToResponse(card, project));
+        return Ok(project is not null ? ToResponse(card, project) : MissingProjectResponse);
     }
 
     [HttpPost]
