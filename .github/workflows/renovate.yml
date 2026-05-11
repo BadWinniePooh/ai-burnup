@@ -1,0 +1,44 @@
+name: Renovate
+
+# Replaces the Mend Renovate GitHub App.
+# Requires a secret named RENOVATE_TOKEN:
+#   - Classic PAT with 'repo' and 'workflow' scopes, OR
+#   - Fine-grained PAT with: Contents (R/W), Pull requests (R/W),
+#     Issues (R/W), Workflows (R/W), Metadata (R)
+# Add the secret at: Settings → Secrets and variables → Actions → New repository secret
+
+on:
+  schedule:
+    # Runs at 04:00 UTC on Monday (06:00 Europe/Berlin in winter).
+    # Renovate's own schedule in renovate.json acts as an additional filter.
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+  # React to checkbox ticks in the Dependency Dashboard issue.
+  issues:
+    types: [edited]
+  # Trigger when a pull request is merged
+  pull_request:
+    types: [closed]
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    # For issue edits, only run when it's the Dependency Dashboard issue.
+    if: github.event_name != 'issues' || contains(github.event.issue.title, 'Dependency Dashboard')
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Self-hosted Renovate
+        uses: renovatebot/github-action@v41.0.16
+        with:
+          configurationFile: .github/renovate.json
+        env:
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          # Use Renovate's own bot identity as git author so commits and PRs
+          # are clearly attributed to the automation and not the token owner.
+          RENOVATE_GIT_AUTHOR: Renovate Bot <29139614+renovate[bot]@users.noreply.github.com>

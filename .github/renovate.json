@@ -1,0 +1,72 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "schedule": [
+    "every weekend"
+  ],
+  "timezone": "Europe/Berlin",
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"],
+    "addLabels": ["security"]
+  },
+  "osvVulnerabilityAlerts": true,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track versioned CDN dependencies pinned in the frontend HTML file",
+      "managerFilePatterns": [
+        "/project/Burnup PM Tool\\.html$/"
+      ],
+      "matchStrings": [
+        "unpkg\\.com/(?<depName>[^@]+)@(?<currentValue>[^/]+)/"
+      ],
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "Track jsdelivr CDN dependencies pinned in the frontend HTML file",
+      "managerFilePatterns": [
+        "/project/Burnup PM Tool\\.html$/"
+      ],
+      "matchStrings": [
+        "cdn\\.jsdelivr\\.net/npm/(?<depName>[^@]+)@(?<currentValue>[^/]+)/"
+      ],
+      "datasourceTemplate": "npm"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "GitHub Actions",
+      "schedule": [
+        "every weekend"
+      ]
+    },
+    {
+      "matchManagers": [
+        "nuget",
+        "dockerfile",
+        "docker-compose",
+        "custom.regex"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "non-major dependencies"
+    },
+    {
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "addLabels": [
+        "major-update"
+      ]
+    }
+  ]
+}
