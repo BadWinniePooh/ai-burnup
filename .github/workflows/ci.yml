@@ -42,7 +42,10 @@ jobs:
 
       - name: Check all CDN script URLs return HTTP 200
         run: |
-          URLS=$(grep -oP 'src="\Khttps://[^"]+' "project/Burnup PM Tool.html")
+          # Collect both src="https://..." attributes and from 'https://...' ESM imports
+          SRC_URLS=$(grep -oP 'src="\Khttps://[^"]+' "project/Burnup PM Tool.html")
+          ESM_URLS=$(grep -oP "from '\Khttps://[^']+" "project/Burnup PM Tool.html")
+          URLS=$(printf '%s\n%s' "$SRC_URLS" "$ESM_URLS" | grep -v '^$')
           FAILED=0
           for URL in $URLS; do
             STATUS=$(curl -o /dev/null -sL -w "%{http_code}" "$URL")
