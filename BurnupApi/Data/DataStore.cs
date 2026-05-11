@@ -363,6 +363,9 @@ public class DataStore(BurnupDbContext db)
             .ToListAsync();
         var existingMap = existing.ToDictionary(s => s.Date);
 
+        var toUpdate = new List<DailySnapshot>();
+        var toAdd = new List<DailySnapshot>();
+
         foreach (var s in snapshots)
         {
             if (existingMap.TryGetValue(s.Date, out var row))
@@ -371,12 +374,15 @@ public class DataStore(BurnupDbContext db)
                 row.DoneCount  = s.DoneCount;
                 row.ScopeDays  = s.ScopeDays;
                 row.DoneDays   = s.DoneDays;
+                toUpdate.Add(row);
             }
             else
             {
                 db.Snapshots.Add(s);
+                toAdd.Add(s);
             }
         }
+
         await db.SaveChangesAsync();
     }
 
