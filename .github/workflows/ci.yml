@@ -14,7 +14,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Restore dependencies
         run: dotnet restore BurnupApi/BurnupApi.csproj
@@ -33,3 +33,28 @@ jobs:
 
       - name: Build frontend image
         run: docker build -f frontend.Dockerfile .
+
+  validate-cdn-deps:
+    name: Validate CDN dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check all CDN script URLs return HTTP 200
+        run: |
+          URLS=$(grep -oP 'src="\Khttps://[^"]+' "project/Burnup PM Tool.html")
+          FAILED=0
+          for URL in $URLS; do
+            STATUS=$(curl -o /dev/null -sL -w "%{http_code}" "$URL")
+            if [ "$STATUS" = "200" ]; then
+              echo "  OK  $URL"
+            else
+              echo "FAIL  $URL  (HTTP $STATUS)"
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" = "1" ]; then
+            echo ""
+            echo "One or more CDN dependencies are unreachable."
+            exit 1
+          fi
