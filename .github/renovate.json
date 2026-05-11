@@ -17,8 +17,8 @@
     {
       "customType": "regex",
       "description": "Track versioned CDN dependencies pinned in the frontend HTML file",
-      "fileMatch": [
-        "project/Burnup PM Tool\\.html$"
+      "managerFilePatterns": [
+        "/project/Burnup PM Tool\\.html$/"
       ],
       "matchStrings": [
         "unpkg\\.com/(?<depName>[^@]+)@(?<currentValue>[^/]+)/"
@@ -28,8 +28,8 @@
     {
       "customType": "regex",
       "description": "Track jsdelivr CDN dependencies pinned in the frontend HTML file",
-      "fileMatch": [
-        "project/Burnup PM Tool\\.html$"
+      "managerFilePatterns": [
+        "/project/Burnup PM Tool\\.html$/"
       ],
       "matchStrings": [
         "cdn\\.jsdelivr\\.net/npm/(?<depName>[^@]+)@(?<currentValue>[^/]+)/"
