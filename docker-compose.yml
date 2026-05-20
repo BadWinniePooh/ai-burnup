@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: burnup
       POSTGRES_USER: burnup
-      POSTGRES_PASSWORD: burnup
+      POSTGRES_PASSWORD: ${Postgres__Password:?Postgres__Password is required}
     volumes:
       - db_data:/var/lib/postgresql
     healthcheck:
@@ -22,7 +22,7 @@ services:
     environment:
       - ASPNETCORE_URLS=http://+:5000
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=burnup;Username=burnup;Password=burnup
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=burnup;Username=burnup;Password=${Postgres__Password}
       - Jwt__Secret=${Jwt__Secret}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
@@ -50,7 +50,7 @@ services:
     environment:
       - BACKEND_URL=http://backend:5000   # override to point at a different backend
     ports:
-      - "8080:80"     # app is at http://localhost:8080
+      - "8080:8080"     # app is at http://localhost:8080
     depends_on:
       backend:
         condition: service_healthy

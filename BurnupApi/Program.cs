@@ -53,7 +53,17 @@ builder.Services
 builder.Services.AddAuthorization();
 
 builder.Services.AddCors(o =>
-    o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+    }
+    else
+    {
+        var origin = builder.Configuration["AppUrl"] ?? "http://localhost:8080";
+        o.AddDefaultPolicy(p => p.WithOrigins(origin).AllowAnyHeader().AllowAnyMethod());
+    }
+});
 
 var app = builder.Build();
 
@@ -170,8 +180,13 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 
 app.UseCors();
-app.UseSwagger();
-app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Burnup PM API v1"));
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Burnup PM API v1"));
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -19,4 +19,7 @@ COPY --from=build /app/publish .
 ENV ASPNETCORE_URLS=http://+:5000
 EXPOSE 5000
 
+# Run as the built-in non-root 'app' user (UID 1654) provided by the dotnet base image
+USER app
+
 ENTRYPOINT ["dotnet", "BurnupApi.dll"]

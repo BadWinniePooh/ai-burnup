@@ -1,4 +1,7 @@
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:alpine
+
+# Build steps require root to write to html directory and nginx config paths
+USER root
 
 # Copy all frontend source files into the nginx web root
 COPY project/ /usr/share/nginx/html/
@@ -14,4 +17,7 @@ RUN sed -i \
 # substituting env vars (e.g. BACKEND_URL) while leaving nginx variables ($host etc.) intact.
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 
-EXPOSE 80
+# Drop back to the unprivileged nginx user (UID 101)
+USER 101
+
+EXPOSE 8080
