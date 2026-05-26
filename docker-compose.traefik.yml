@@ -1,0 +1,114 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Burnup – Traefik deployment
+#
+# Usage:
+#   docker compose -f docker-compose.traefik.yml up -d --build
+#
+# Prerequisites:
+#   • Traefik is already running and attached to the external network named
+#     by TRAEFIK_NETWORK (default: traefik).
+#   • Traefik has a "websecure" entrypoint (port 443) and a cert resolver
+#     named by TRAEFIK_CERTRESOLVER (default: letsencrypt).
+#   • DOMAIN, Postgres__Password, Jwt__Secret, ADMIN_EMAIL and ADMIN_PASSWORD
+#     must be set in .env (see .env.example).
+#
+# The frontend is NOT exposed on a host port — Traefik routes HTTPS traffic
+# directly into the internal Docker network.
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  # Internal network — no external access. db and backend are only reachable
+  # inside this stack.
+  internal:
+    internal: true
+
+  # Shared network that Traefik listens on. Must already exist before running
+  # this compose file:
+  #   docker network create traefik
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}
+
+services:
+
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: burnup
+      POSTGRES_USER: burnup
+      POSTGRES_PASSWORD: ${Postgres__Password:?Postgres__Password is required}
+    volumes:
+      - db_data:/var/lib/postgresql
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U burnup -d burnup"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./BurnupApi
+      dockerfile: Dockerfile
+    environment:
+      - ASPNETCORE_URLS=http://+:5000
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=burnup;Username=burnup;Password=${Postgres__Password}
+      - Jwt__Secret=${Jwt__Secret}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - AppUrl=https://${DOMAIN:?DOMAIN is required}
+      - Smtp__Host=${Smtp__Host:-}
+      - Smtp__Port=${Smtp__Port:-587}
+      - Smtp__User=${Smtp__User:-}
+      - Smtp__Pass=${Smtp__Pass:-}
+      - Smtp__From=${Smtp__From:-noreply@burnup.app}
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    environment:
+      - BACKEND_URL=http://backend:5000
+    networks:
+      - internal
+      - traefik
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+
+      # ── HTTPS router ─────────────────────────────────────────────
+      - "traefik.http.routers.burnup.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.burnup.entrypoints=websecure"
+      - "traefik.http.routers.burnup.tls=true"
+      - "traefik.http.routers.burnup.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+
+      # Tell Traefik which port nginx listens on inside the container
+      - "traefik.http.services.burnup.loadbalancer.server.port=8080"
+
+      # ── HTTP → HTTPS redirect ─────────────────────────────────────
+      - "traefik.http.routers.burnup-http.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.burnup-http.entrypoints=web"
+      - "traefik.http.routers.burnup-http.middlewares=burnup-https-redirect"
+      - "traefik.http.middlewares.burnup-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.burnup-https-redirect.redirectscheme.permanent=true"
+
+volumes:
+  db_data:
