@@ -334,7 +334,14 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
   const [settingsOpen,   setSettingsOpen]   = React.useState(false);
   const [userMenuOpen,   setUserMenuOpen]   = React.useState(false);
   const [deleteConfirm,  setDeleteConfirm]  = React.useState(false);
+  const [isMobile,       setIsMobile]       = React.useState(() => window.innerWidth < 640);
   const initials = currentUser?.email?.[0]?.toUpperCase() ?? '?';
+
+  React.useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const closeUserMenu = () => { setUserMenuOpen(false); setDeleteConfirm(false); };
   return (
@@ -343,30 +350,31 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
       padding: '0 20px', height: 54,
       borderBottom: `1px solid ${theme.border}`, background: theme.surface, flexShrink: 0,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 18, minWidth: 0, flex: 1 }}>
         {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <div style={{ width: 22, height: 22, borderRadius: 5, background: theme.text, display: 'grid', placeItems: 'center' }}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M1 10 L4 6 L7 8 L11 2" stroke={theme.bg} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '-0.01em' }}>Burnup</span>
+          {!isMobile && <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '-0.01em' }}>Burnup</span>}
         </div>
 
         {/* Project switcher */}
-        <div style={{ height: 22, width: 1, background: theme.border }}></div>
-        <div style={{ position: 'relative' }}>
+        {!isMobile && <div style={{ height: 22, width: 1, background: theme.border, flexShrink: 0 }}></div>}
+        <div style={{ position: 'relative', minWidth: 0, flexShrink: 1 }}>
           <button onClick={() => setPickerOpen(v => !v)} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '5px 10px 5px 8px', border: `1px solid ${theme.border}`,
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '5px 8px 5px 7px', border: `1px solid ${theme.border}`,
             background: theme.bg, color: theme.text, borderRadius: 6,
             cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', fontWeight: 500,
+            maxWidth: isMobile ? 140 : 260, overflow: 'hidden',
           }}>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: project.color }}></span>
-            <span>{project.name}</span>
-            <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace' }}>{project.code}</span>
-            <svg width="9" height="6" viewBox="0 0 9 6" fill="none" style={{ marginLeft: 2 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: project.color, flexShrink: 0 }}></span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{project.name}</span>
+            {!isMobile && <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace', flexShrink: 0 }}>{project.code}</span>}
+            <svg width="9" height="6" viewBox="0 0 9 6" fill="none" style={{ marginLeft: 2, flexShrink: 0 }}>
               <path d="M1 1l3.5 3.5L8 1" stroke={theme.textMuted} strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
@@ -392,10 +400,10 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
                     }}>
                       <span style={{ width: 10, height: 10, borderRadius: 3, background: p.color, flexShrink: 0 }}></span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 500 }}>{p.name}</div>
-                        <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }}>{p.description}</div>
+                        <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                        <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</div>
                       </div>
-                      <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace' }}>{p.code}</span>
+                      <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace', flexShrink: 0 }}>{p.code}</span>
                     </button>
                     {(p.userRole === 'owner' || p.userRole === 'admin') && (
                       <button onClick={() => { onShareProject(p); setPickerOpen(false); }} title="Share project" style={{
@@ -440,10 +448,10 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
         </div>
 
         {/* View tabs */}
-        <div style={{ display: 'flex', gap: 2, padding: 2, background: theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderRadius: 7 }}>
-          {[['dashboard', 'Dashboard'], ['cards', 'Cards']].map(([k, l]) => (
+        <div style={{ display: 'flex', gap: 2, padding: 2, background: theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderRadius: 7, flexShrink: 0 }}>
+          {[['dashboard', isMobile ? 'Dash' : 'Dashboard'], ['cards', 'Cards']].map(([k, l]) => (
             <button key={k} onClick={() => onViewChange(k)} style={{
-              padding: '5px 12px', fontSize: 12.5, border: 'none', borderRadius: 5,
+              padding: isMobile ? '5px 8px' : '5px 12px', fontSize: 12.5, border: 'none', borderRadius: 5,
               background: view === k ? theme.surface : 'transparent',
               color: view === k ? theme.text : theme.textMuted,
               cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
@@ -453,8 +461,8 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ fontSize: 11.5, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace', marginRight: 6 }}>⌘K</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        {!isMobile && <div style={{ fontSize: 11.5, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace', marginRight: 6 }}>⌘K</div>}
         <button onClick={() => updateTweak({ dark: !tweaks.dark })} title="Toggle theme" style={{
           width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
           background: theme.surface, color: theme.textMuted, cursor: 'pointer',
