@@ -94,6 +94,7 @@ public class CardsController(DataStore store) : ControllerBase
         };
 
         await store.AddCardAsync(card);
+        await store.DeleteSnapshotsFromAsync(card.ProjectId, card.CreatedDate);
         var project = await store.GetProjectAsync(card.ProjectId);
         return CreatedAtAction(nameof(Get), new { uid = card.Uid }, ToResponse(card, project));
     }
@@ -115,6 +116,11 @@ public class CardsController(DataStore store) : ControllerBase
         if (await store.CardNumberConflictsAsync(existing.ProjectId, uid, req.CardNumber))
             return Conflict($"Card number {req.CardNumber} is already used in project '{existing.ProjectId}'.");
 
+        // Capture old dates before EF overwrites the tracked entity in UpdateCardAsync
+        var oldCreated = existing.CreatedDate;
+        var oldStarted = existing.StartedDate;
+        var oldEnded   = existing.EndDate;
+
         var updated = new Card
         {
             Uid            = uid,
@@ -132,6 +138,13 @@ public class CardsController(DataStore store) : ControllerBase
         };
 
         await store.UpdateCardAsync(updated);
+
+        // Invalidate snapshots from the earliest date either version of the card affects
+        var allDates = new[] { oldCreated, created }
+            .Concat(new[] { oldStarted, oldEnded, started, ended }
+                .Where(d => d.HasValue).Select(d => d!.Value));
+        await store.DeleteSnapshotsFromAsync(updated.ProjectId, allDates.Min());
+
         var project = await store.GetProjectAsync(updated.ProjectId);
         return Ok(ToResponse(updated, project));
     }
@@ -146,7 +159,9 @@ public class CardsController(DataStore store) : ControllerBase
         if (role is null) return NotFound();
         if (!CanEdit(role)) return Forbid();
 
-        return await store.DeleteCardAsync(uid) ? NoContent() : NotFound();
+        if (!await store.DeleteCardAsync(uid)) return NotFound();
+        await store.DeleteSnapshotsFromAsync(card.ProjectId, card.CreatedDate);
+        return NoContent();
     }
 
     // ── Helpers ───────────────────────────────────────────────────
