@@ -330,11 +330,13 @@ function App() {
 }
 
 function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak, onNewProject, onEditProject, onShareProject, currentUser, onLogout, onDeleteAccount, onAdminOpen }) {
-  const [pickerOpen,     setPickerOpen]     = React.useState(false);
-  const [settingsOpen,   setSettingsOpen]   = React.useState(false);
-  const [userMenuOpen,   setUserMenuOpen]   = React.useState(false);
-  const [deleteConfirm,  setDeleteConfirm]  = React.useState(false);
-  const [isMobile,       setIsMobile]       = React.useState(() => window.innerWidth < 640);
+  const [pickerOpen,            setPickerOpen]            = React.useState(false);
+  const [settingsOpen,          setSettingsOpen]          = React.useState(false);
+  const [userMenuOpen,          setUserMenuOpen]          = React.useState(false);
+  const [deleteConfirm,         setDeleteConfirm]         = React.useState(false);
+  const [hamburgerOpen,         setHamburgerOpen]         = React.useState(false);
+  const [hamburgerDeleteConfirm,setHamburgerDeleteConfirm]= React.useState(false);
+  const [isMobile,              setIsMobile]              = React.useState(() => window.innerWidth < 640);
   const initials = currentUser?.email?.[0]?.toUpperCase() ?? '?';
 
   React.useEffect(() => {
@@ -462,89 +464,205 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        {!isMobile && <div style={{ fontSize: 11.5, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace', marginRight: 6 }}>⌘K</div>}
-        <button onClick={() => updateTweak({ dark: !tweaks.dark })} title="Toggle theme" style={{
-          width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
-          background: theme.surface, color: theme.textMuted, cursor: 'pointer',
-          display: 'grid', placeItems: 'center',
-        }}>
-          {tweaks.dark
-            ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 8.5a4.5 4.5 0 01-5.5-5.5A5 5 0 107 12a5 5 0 004-3.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
-            : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.3" /><path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.8 2.8l1 1M10.2 10.2l1 1M2.8 11.2l1-1M10.2 3.8l1-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
-          }
-        </button>
-        <button onClick={() => setSettingsOpen(v => !v)} title="Appearance" style={{
-          width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
-          background: settingsOpen ? theme.accentSoft : theme.surface,
-          color: settingsOpen ? theme.accent : theme.textMuted,
-          cursor: 'pointer', display: 'grid', placeItems: 'center',
-        }}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M1 4h12M1 10h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-            <circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
-            <circle cx="10" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
-          </svg>
-        </button>
-        {currentUser?.role === 'admin' && (
-          <button onClick={onAdminOpen} title="Admin" style={{
-            width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
-            background: theme.surface, color: theme.textMuted, cursor: 'pointer',
-            display: 'grid', placeItems: 'center',
-          }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M7 1L2 3.5v4c0 2.8 2.1 5.4 5 6 2.9-.6 5-3.2 5-6v-4L7 1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-            </svg>
-          </button>
-        )}
-        <div style={{ position: 'relative' }}>
-          <button onClick={() => setUserMenuOpen(v => !v)} title={currentUser?.email} style={{
-            width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
-            background: `linear-gradient(135deg, ${theme.accent}, oklch(0.62 0.15 ${((tweaks.accentHue + 60) % 360)}))`,
-            display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 600, color: '#fff',
-            outline: userMenuOpen ? `2px solid ${theme.accent}` : 'none', outlineOffset: 2,
-          }}>{initials}</button>
-          {userMenuOpen && (
-            <>
-              <div onClick={closeUserMenu} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
-              <div style={{
-                position: 'absolute', right: 0, top: 36, zIndex: 6,
-                background: theme.surface, border: `1px solid ${theme.border}`,
-                borderRadius: 8, width: 210, padding: 4,
-                boxShadow: theme.dark ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.08)',
-                fontFamily: 'inherit',
-              }}>
-                <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${theme.border}`, marginBottom: 4 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser?.email}</div>
-                  {currentUser?.role === 'admin' && (
-                    <div style={{ fontSize: 10.5, color: theme.accent, marginTop: 1 }}>Administrator</div>
-                  )}
-                </div>
-                <button onClick={() => { closeUserMenu(); onLogout(); }} style={{
-                  width: '100%', padding: '7px 12px', border: 'none', background: 'transparent',
-                  color: theme.textMuted, textAlign: 'left', cursor: 'pointer',
-                  fontSize: 12.5, fontFamily: 'inherit', borderRadius: 5,
-                }}>Sign out</button>
-                <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }} />
-                {deleteConfirm
-                  ? <div style={{ padding: '8px 12px' }}>
-                      <div style={{ fontSize: 12, color: theme.danger, marginBottom: 8 }}>
-                        Delete your account and all projects?
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <window.Button theme={theme} variant="danger" size="sm" onClick={onDeleteAccount}>Delete</window.Button>
-                        <window.Button theme={theme} variant="ghost"  size="sm" onClick={() => setDeleteConfirm(false)}>Cancel</window.Button>
-                      </div>
+        {isMobile ? (
+          // ── Mobile: hamburger menu ──────────────────────────────────────────
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setHamburgerOpen(v => !v)}
+              title="Menu"
+              style={{
+                width: 34, height: 34, borderRadius: 7,
+                border: `1px solid ${theme.border}`,
+                background: hamburgerOpen ? theme.accentSoft : theme.surface,
+                color: hamburgerOpen ? theme.accent : theme.textMuted,
+                cursor: 'pointer', display: 'grid', placeItems: 'center',
+              }}
+            >
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
+                <path d="M1 1h14M1 6h14M1 11h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+            </button>
+            {hamburgerOpen && (
+              <>
+                <div onClick={() => { setHamburgerOpen(false); setHamburgerDeleteConfirm(false); }} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
+                <div style={{
+                  position: 'absolute', right: 0, top: 42, zIndex: 6,
+                  background: theme.surface, border: `1px solid ${theme.border}`,
+                  borderRadius: 10, width: 240, padding: 6,
+                  boxShadow: theme.dark ? '0 16px 48px rgba(0,0,0,0.6)' : '0 16px 48px rgba(0,0,0,0.12)',
+                  fontFamily: 'inherit',
+                }}>
+                  {/* Signed-in user */}
+                  <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border}`, marginBottom: 4 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser?.email}</div>
+                    {currentUser?.role === 'admin' && <div style={{ fontSize: 10.5, color: theme.accent, marginTop: 1 }}>Administrator</div>}
+                  </div>
+
+                  {/* Theme toggle */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px' }}>
+                    <span style={{ fontSize: 12.5, color: theme.text }}>Theme</span>
+                    <div style={{ display: 'inline-flex', padding: 2, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 6 }}>
+                      {[['light','Light'],['dark','Dark']].map(([k,l]) => {
+                        const active = (tweaks.dark ? 'dark' : 'light') === k;
+                        return (
+                          <button key={k} onClick={() => updateTweak({ dark: k === 'dark' })} style={{
+                            padding: '3px 10px', fontSize: 11.5, border: 'none', borderRadius: 4,
+                            background: active ? theme.surfaceElev : 'transparent',
+                            color: active ? theme.text : theme.textMuted,
+                            cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
+                            boxShadow: active ? (theme.dark ? '0 1px 0 rgba(255,255,255,0.05)' : '0 1px 2px rgba(0,0,0,0.06)') : 'none',
+                          }}>{l}</button>
+                        );
+                      })}
                     </div>
-                  : <button onClick={() => setDeleteConfirm(true)} style={{
+                  </div>
+
+                  {/* Appearance */}
+                  <button onClick={() => { setHamburgerOpen(false); setSettingsOpen(true); }} style={{
+                    width: '100%', padding: '8px 12px', border: 'none', background: 'transparent',
+                    color: theme.text, textAlign: 'left', cursor: 'pointer',
+                    fontSize: 12.5, fontFamily: 'inherit', borderRadius: 6,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: theme.textMuted, flexShrink: 0 }}>
+                      <path d="M1 4h12M1 10h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                      <circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
+                      <circle cx="10" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
+                    </svg>
+                    Appearance
+                  </button>
+
+                  {/* Admin panel */}
+                  {currentUser?.role === 'admin' && (
+                    <button onClick={() => { setHamburgerOpen(false); onAdminOpen(); }} style={{
+                      width: '100%', padding: '8px 12px', border: 'none', background: 'transparent',
+                      color: theme.text, textAlign: 'left', cursor: 'pointer',
+                      fontSize: 12.5, fontFamily: 'inherit', borderRadius: 6,
+                      display: 'flex', alignItems: 'center', gap: 10,
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: theme.textMuted, flexShrink: 0 }}>
+                        <path d="M7 1L2 3.5v4c0 2.8 2.1 5.4 5 6 2.9-.6 5-3.2 5-6v-4L7 1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                      </svg>
+                      Admin panel
+                    </button>
+                  )}
+
+                  <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }} />
+
+                  <button onClick={() => { setHamburgerOpen(false); onLogout(); }} style={{
+                    width: '100%', padding: '8px 12px', border: 'none', background: 'transparent',
+                    color: theme.textMuted, textAlign: 'left', cursor: 'pointer',
+                    fontSize: 12.5, fontFamily: 'inherit', borderRadius: 6,
+                  }}>Sign out</button>
+
+                  <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }} />
+
+                  {hamburgerDeleteConfirm
+                    ? <div style={{ padding: '8px 12px' }}>
+                        <div style={{ fontSize: 12, color: theme.danger, marginBottom: 8 }}>Delete your account and all projects?</div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <window.Button theme={theme} variant="danger" size="sm" onClick={onDeleteAccount}>Delete</window.Button>
+                          <window.Button theme={theme} variant="ghost" size="sm" onClick={() => setHamburgerDeleteConfirm(false)}>Cancel</window.Button>
+                        </div>
+                      </div>
+                    : <button onClick={() => setHamburgerDeleteConfirm(true)} style={{
+                        width: '100%', padding: '8px 12px', border: 'none', background: 'transparent',
+                        color: theme.danger, textAlign: 'left', cursor: 'pointer',
+                        fontSize: 12.5, fontFamily: 'inherit', borderRadius: 6,
+                      }}>Delete account…</button>
+                  }
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          // ── Desktop: individual icon buttons ───────────────────────────────
+          <>
+            <div style={{ fontSize: 11.5, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace', marginRight: 6 }}>⌘K</div>
+            <button onClick={() => updateTweak({ dark: !tweaks.dark })} title="Toggle theme" style={{
+              width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
+              background: theme.surface, color: theme.textMuted, cursor: 'pointer',
+              display: 'grid', placeItems: 'center',
+            }}>
+              {tweaks.dark
+                ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 8.5a4.5 4.5 0 01-5.5-5.5A5 5 0 107 12a5 5 0 004-3.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+                : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.3" /><path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.8 2.8l1 1M10.2 10.2l1 1M2.8 11.2l1-1M10.2 3.8l1-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+              }
+            </button>
+            <button onClick={() => setSettingsOpen(v => !v)} title="Appearance" style={{
+              width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
+              background: settingsOpen ? theme.accentSoft : theme.surface,
+              color: settingsOpen ? theme.accent : theme.textMuted,
+              cursor: 'pointer', display: 'grid', placeItems: 'center',
+            }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M1 4h12M1 10h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
+                <circle cx="10" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
+              </svg>
+            </button>
+            {currentUser?.role === 'admin' && (
+              <button onClick={onAdminOpen} title="Admin" style={{
+                width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
+                background: theme.surface, color: theme.textMuted, cursor: 'pointer',
+                display: 'grid', placeItems: 'center',
+              }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 1L2 3.5v4c0 2.8 2.1 5.4 5 6 2.9-.6 5-3.2 5-6v-4L7 1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setUserMenuOpen(v => !v)} title={currentUser?.email} style={{
+                width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                background: `linear-gradient(135deg, ${theme.accent}, oklch(0.62 0.15 ${((tweaks.accentHue + 60) % 360)}))`,
+                display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 600, color: '#fff',
+                outline: userMenuOpen ? `2px solid ${theme.accent}` : 'none', outlineOffset: 2,
+              }}>{initials}</button>
+              {userMenuOpen && (
+                <>
+                  <div onClick={closeUserMenu} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
+                  <div style={{
+                    position: 'absolute', right: 0, top: 36, zIndex: 6,
+                    background: theme.surface, border: `1px solid ${theme.border}`,
+                    borderRadius: 8, width: 210, padding: 4,
+                    boxShadow: theme.dark ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.08)',
+                    fontFamily: 'inherit',
+                  }}>
+                    <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${theme.border}`, marginBottom: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser?.email}</div>
+                      {currentUser?.role === 'admin' && (
+                        <div style={{ fontSize: 10.5, color: theme.accent, marginTop: 1 }}>Administrator</div>
+                      )}
+                    </div>
+                    <button onClick={() => { closeUserMenu(); onLogout(); }} style={{
                       width: '100%', padding: '7px 12px', border: 'none', background: 'transparent',
-                      color: theme.danger, textAlign: 'left', cursor: 'pointer',
+                      color: theme.textMuted, textAlign: 'left', cursor: 'pointer',
                       fontSize: 12.5, fontFamily: 'inherit', borderRadius: 5,
-                    }}>Delete account…</button>
-                }
-              </div>
-            </>
-          )}
-        </div>
+                    }}>Sign out</button>
+                    <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }} />
+                    {deleteConfirm
+                      ? <div style={{ padding: '8px 12px' }}>
+                          <div style={{ fontSize: 12, color: theme.danger, marginBottom: 8 }}>
+                            Delete your account and all projects?
+                          </div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <window.Button theme={theme} variant="danger" size="sm" onClick={onDeleteAccount}>Delete</window.Button>
+                            <window.Button theme={theme} variant="ghost"  size="sm" onClick={() => setDeleteConfirm(false)}>Cancel</window.Button>
+                          </div>
+                        </div>
+                      : <button onClick={() => setDeleteConfirm(true)} style={{
+                          width: '100%', padding: '7px 12px', border: 'none', background: 'transparent',
+                          color: theme.danger, textAlign: 'left', cursor: 'pointer',
+                          fontSize: 12.5, fontFamily: 'inherit', borderRadius: 5,
+                        }}>Delete account…</button>
+                    }
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
       {settingsOpen && (
         <SettingsModal theme={theme} tweaks={tweaks} updateTweak={updateTweak}
