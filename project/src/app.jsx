@@ -389,12 +389,12 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
                 background: theme.surface, border: `1px solid ${theme.border}`,
                 borderRadius: 8,
                 boxShadow: theme.dark ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.08)',
-                width: 280, padding: 4,
+                width: 280, maxWidth: 'calc(100vw - 24px)', padding: 4,
               }}>
                 {projects.map(p => (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
                     <button onClick={() => { onProjectChange(p.id); setPickerOpen(false); }} style={{
-                      flex: 1, display: 'flex', alignItems: 'center', gap: 10,
+                      flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10,
                       padding: '8px 10px', border: 'none',
                       background: p.id === project.id ? theme.accentSoft : 'transparent',
                       color: theme.text, borderRadius: 6, cursor: 'pointer',
