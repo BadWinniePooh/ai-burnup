@@ -741,6 +741,53 @@ const PROJECT_COLORS = [
   '#ec4899','#a855f7','#64748b','#78716c',
 ];
 
+function TagEditor({ theme, values, onChange, placeholder }) {
+  const [draft, setDraft] = React.useState('');
+
+  const add = () => {
+    const v = draft.trim().toLowerCase().replace(/[^a-z0-9\-_ ]/g, '');
+    if (v && !values.includes(v)) onChange([...values, v]);
+    setDraft('');
+  };
+
+  const remove = (v) => {
+    if (values.length <= 1) return;
+    onChange(values.filter(x => x !== v));
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 7, minHeight: 28 }}>
+        {values.map(v => (
+          <span key={v} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '2px 7px 2px 8px',
+            background: theme.accentSoft, borderRadius: 5,
+            fontSize: 12, color: theme.accent, fontFamily: 'ui-monospace, Menlo, monospace',
+          }}>
+            {v}
+            {values.length > 1 && (
+              <button onClick={() => remove(v)} style={{
+                border: 'none', background: 'transparent', color: 'inherit',
+                cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: 14,
+                display: 'flex', alignItems: 'center',
+              }}>×</button>
+            )}
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Input theme={theme} value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder={placeholder}
+          style={{ fontSize: 12, padding: '6px 10px' }} />
+        <Button theme={theme} variant="ghost" size="sm" onClick={add} disabled={!draft.trim()}>Add</Button>
+      </div>
+    </div>
+  );
+}
+
 function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
   const isNew = !initialProject.id;
   const [name, setName]             = React.useState(initialProject.name        || '');
@@ -748,6 +795,8 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
   const [description, setDescription] = React.useState(initialProject.description || '');
   const [color, setColor]           = React.useState(initialProject.color       || PROJECT_COLORS[0]);
   const [startDate, setStartDate]   = React.useState(initialProject.startDate   || window.TODAY);
+  const [cardTypes,  setCardTypes]  = React.useState(() => initialProject.cardTypes  || window.CARD_TYPES);
+  const [scopeTypes, setScopeTypes] = React.useState(() => initialProject.scopeTypes || window.SCOPES);
   const [saving, setSaving]         = React.useState(false);
   const [error, setError]           = React.useState(null);
 
@@ -764,7 +813,7 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
     setSaving(true);
     setError(null);
     try {
-      await onSave({ name: name.trim(), code: code.trim(), description: description.trim(), color, startDate });
+      await onSave({ name: name.trim(), code: code.trim(), description: description.trim(), color, startDate, cardTypes, scopeTypes });
     } catch (e) {
       setError(e.message);
       setSaving(false);
@@ -789,6 +838,7 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
         position: 'relative', zIndex: 1,
         background: theme.surface, border: `1px solid ${theme.borderStrong}`,
         borderRadius: 12, width: 440, padding: 24,
+        maxHeight: '90vh', overflowY: 'auto',
         boxShadow: theme.dark ? '0 24px 80px rgba(0,0,0,0.6)' : '0 24px 80px rgba(0,0,0,0.14)',
         fontFamily: 'Inter, system-ui, sans-serif', color: theme.text,
       }}>
@@ -826,7 +876,7 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
         </div>
 
         {/* Color swatches */}
-        <div style={{ marginBottom: 22 }}>
+        <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 8 }}>Color</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {PROJECT_COLORS.map(c => (
@@ -838,6 +888,18 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
               }} />
             ))}
           </div>
+        </div>
+
+        {/* Card types */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 6 }}>Card types</div>
+          <TagEditor theme={theme} values={cardTypes} onChange={setCardTypes} placeholder="e.g. story" />
+        </div>
+
+        {/* Scope types */}
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 6 }}>Scope types</div>
+          <TagEditor theme={theme} values={scopeTypes} onChange={setScopeTypes} placeholder="e.g. v2" />
         </div>
 
         {error && (

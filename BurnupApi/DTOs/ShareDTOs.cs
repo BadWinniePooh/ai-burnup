@@ -13,5 +13,7 @@ public record ProjectWithRoleResponse(
     string   StartDate,
     int?     UserId,
     string?  PublicToken,
-    string   UserRole
+    string   UserRole,
+    string[] CardTypes,
+    string[] ScopeTypes
 );

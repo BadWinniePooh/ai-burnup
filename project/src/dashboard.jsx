@@ -239,6 +239,7 @@ function Dashboard({ project, cards, theme, chartStyle = 'area', externalSeries 
       {builderOpen && (
         <ChartBuilderModal
           theme={theme}
+          project={project}
           initial={editingChart}
           onSave={handleSaveChart}
           onClose={() => { setBuilderOpen(false); setEditingChart(null); }}
@@ -465,14 +466,14 @@ function AddChartButton({ theme, onClick }) {
   );
 }
 
-const CHART_TYPES  = [['feature','Feature'],['bug','Bug'],['no-code','No-code'],['tiny','Tiny']];
-const CHART_SCOPES = [['mvp','MVP'],['mlp','MLP'],['other','Other']];
-
-function ChartBuilderModal({ theme, initial, onSave, onClose }) {
+function ChartBuilderModal({ theme, project, initial, onSave, onClose }) {
   const [title,       setTitle]       = React.useState(initial?.title || '');
   const [metric,      setMetric]      = React.useState(initial?.metric || 'cards');
   const [typeFilter,  setTypeFilter]  = React.useState(initial?.typeFilter  || []);
   const [scopeFilter, setScopeFilter] = React.useState(initial?.scopeFilter || []);
+
+  const chartTypes  = (project?.cardTypes  || window.CARD_TYPES).map(t => [t, window.TYPE_META[t]?.label ?? t]);
+  const chartScopes = (project?.scopeTypes || window.SCOPES).map(s => [s, s.toUpperCase()]);
 
   React.useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -532,7 +533,7 @@ function ChartBuilderModal({ theme, initial, onSave, onClose }) {
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 8 }}>Filter by card type <span style={{ opacity: 0.6 }}>(empty = all)</span></div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {CHART_TYPES.map(([k, l]) => {
+            {chartTypes.map(([k, l]) => {
               const active = typeFilter.includes(k);
               return (
                 <button key={k} onClick={() => toggleFilter(typeFilter, setTypeFilter, k)} style={{
@@ -549,7 +550,7 @@ function ChartBuilderModal({ theme, initial, onSave, onClose }) {
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 8 }}>Filter by scope <span style={{ opacity: 0.6 }}>(empty = all)</span></div>
           <div style={{ display: 'flex', gap: 6 }}>
-            {CHART_SCOPES.map(([k, l]) => {
+            {chartScopes.map(([k, l]) => {
               const active = scopeFilter.includes(k);
               return (
                 <button key={k} onClick={() => toggleFilter(scopeFilter, setScopeFilter, k)} style={{

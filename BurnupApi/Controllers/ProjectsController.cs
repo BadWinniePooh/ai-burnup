@@ -45,6 +45,12 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
         if (await store.ProjectCodeExistsForUserAsync(code, CurrentUserId))
             return Conflict("You already have a project with that code.");
 
+        var cardTypes  = req.CardTypes  is { Length: > 0 } ct ? ct : DefaultCardTypes;
+        var scopeTypes = req.ScopeTypes is { Length: > 0 } st ? st : DefaultScopeTypes;
+
+        if (ValidateTypesField(cardTypes,  "CardTypes")  is string e1) return BadRequest(e1);
+        if (ValidateTypesField(scopeTypes, "ScopeTypes") is string e2) return BadRequest(e2);
+
         var project = new Project
         {
             Id          = Guid.NewGuid().ToString(),
@@ -54,6 +60,8 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
             Color       = req.Color,
             StartDate   = startDate,
             UserId      = CurrentUserId,
+            CardTypes   = string.Join(",", cardTypes),
+            ScopeTypes  = string.Join(",", scopeTypes),
         };
 
         await store.AddProjectAsync(project);
@@ -80,6 +88,12 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
         if (await store.ProjectCodeExistsForUserAsync(code, existing.UserId ?? CurrentUserId, id))
             return Conflict("You already have a project with that code.");
 
+        var cardTypes  = req.CardTypes  is { Length: > 0 } ct ? ct : existing.GetCardTypesList();
+        var scopeTypes = req.ScopeTypes is { Length: > 0 } st ? st : existing.GetScopeTypesList();
+
+        if (ValidateTypesField(cardTypes,  "CardTypes")  is string e1) return BadRequest(e1);
+        if (ValidateTypesField(scopeTypes, "ScopeTypes") is string e2) return BadRequest(e2);
+
         var updated = new Project
         {
             Id          = id,
@@ -90,6 +104,8 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
             StartDate   = startDate,
             UserId      = existing.UserId,
             PublicToken = existing.PublicToken,
+            CardTypes   = string.Join(",", cardTypes),
+            ScopeTypes  = string.Join(",", scopeTypes),
         };
 
         await store.UpdateProjectAsync(updated);
@@ -162,9 +178,27 @@ public class ProjectsController(DataStore store, BurnupService burnup) : Control
 
     // ── Helpers ───────────────────────────────────────────────────────
 
+    private static readonly string[] DefaultCardTypes  = ["feature", "bug", "no-code", "tiny"];
+    private static readonly string[] DefaultScopeTypes = ["mvp", "mlp", "other"];
+
     private static ProjectWithRoleResponse ToResponse(Project p, string role) =>
         new(p.Id, p.Name, p.Code, p.Description, p.Color,
-            p.StartDate.ToString("yyyy-MM-dd"), p.UserId, p.PublicToken, role);
+            p.StartDate.ToString("yyyy-MM-dd"), p.UserId, p.PublicToken, role,
+            p.GetCardTypesList(), p.GetScopeTypesList());
+
+    private static string? ValidateTypesField(string[] values, string fieldName)
+    {
+        if (values.Length == 0) return $"{fieldName} must have at least one value.";
+        if (values.Length > 20) return $"{fieldName} may have at most 20 values.";
+        foreach (var v in values)
+        {
+            if (string.IsNullOrWhiteSpace(v)) return $"{fieldName} values must not be empty.";
+            if (v.Length > 40) return $"{fieldName} values must be 40 characters or fewer.";
+            if (!System.Text.RegularExpressions.Regex.IsMatch(v, @"^[a-zA-Z0-9\-_ ]+$"))
+                return $"{fieldName} values may only contain letters, digits, hyphens, underscores, and spaces.";
+        }
+        return null;
+    }
 
     private static bool CanEdit(string role)   => role is "owner" or "admin" or "editor";
     private static bool CanDelete(string role) => role is "owner" or "admin";
