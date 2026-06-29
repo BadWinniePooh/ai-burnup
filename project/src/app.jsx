@@ -330,11 +330,20 @@ function App() {
 }
 
 function Header({ theme, project, projects, onProjectChange, view, onViewChange, tweaks, updateTweak, onNewProject, onEditProject, onShareProject, currentUser, onLogout, onDeleteAccount, onAdminOpen }) {
-  const [pickerOpen,     setPickerOpen]     = React.useState(false);
-  const [settingsOpen,   setSettingsOpen]   = React.useState(false);
-  const [userMenuOpen,   setUserMenuOpen]   = React.useState(false);
-  const [deleteConfirm,  setDeleteConfirm]  = React.useState(false);
+  const [pickerOpen,            setPickerOpen]            = React.useState(false);
+  const [settingsOpen,          setSettingsOpen]          = React.useState(false);
+  const [userMenuOpen,          setUserMenuOpen]          = React.useState(false);
+  const [deleteConfirm,         setDeleteConfirm]         = React.useState(false);
+  const [hamburgerOpen,         setHamburgerOpen]         = React.useState(false);
+  const [hamburgerDeleteConfirm,setHamburgerDeleteConfirm]= React.useState(false);
+  const [isMobile,              setIsMobile]              = React.useState(() => window.innerWidth < 640);
   const initials = currentUser?.email?.[0]?.toUpperCase() ?? '?';
+
+  React.useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const closeUserMenu = () => { setUserMenuOpen(false); setDeleteConfirm(false); };
   return (
@@ -343,30 +352,31 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
       padding: '0 20px', height: 54,
       borderBottom: `1px solid ${theme.border}`, background: theme.surface, flexShrink: 0,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 18, minWidth: 0, flex: 1 }}>
         {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <div style={{ width: 22, height: 22, borderRadius: 5, background: theme.text, display: 'grid', placeItems: 'center' }}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M1 10 L4 6 L7 8 L11 2" stroke={theme.bg} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '-0.01em' }}>Burnup</span>
+          {!isMobile && <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '-0.01em' }}>Burnup</span>}
         </div>
 
         {/* Project switcher */}
-        <div style={{ height: 22, width: 1, background: theme.border }}></div>
-        <div style={{ position: 'relative' }}>
+        {!isMobile && <div style={{ height: 22, width: 1, background: theme.border, flexShrink: 0 }}></div>}
+        <div style={{ position: 'relative', minWidth: 0, flexShrink: 1 }}>
           <button onClick={() => setPickerOpen(v => !v)} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '5px 10px 5px 8px', border: `1px solid ${theme.border}`,
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '5px 8px 5px 7px', border: `1px solid ${theme.border}`,
             background: theme.bg, color: theme.text, borderRadius: 6,
             cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', fontWeight: 500,
+            maxWidth: isMobile ? 140 : 260, overflow: 'hidden',
           }}>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: project.color }}></span>
-            <span>{project.name}</span>
-            <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace' }}>{project.code}</span>
-            <svg width="9" height="6" viewBox="0 0 9 6" fill="none" style={{ marginLeft: 2 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: project.color, flexShrink: 0 }}></span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{project.name}</span>
+            {!isMobile && <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace', flexShrink: 0 }}>{project.code}</span>}
+            <svg width="9" height="6" viewBox="0 0 9 6" fill="none" style={{ marginLeft: 2, flexShrink: 0 }}>
               <path d="M1 1l3.5 3.5L8 1" stroke={theme.textMuted} strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
@@ -379,12 +389,12 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
                 background: theme.surface, border: `1px solid ${theme.border}`,
                 borderRadius: 8,
                 boxShadow: theme.dark ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.08)',
-                width: 280, padding: 4,
+                width: 280, maxWidth: 'calc(100vw - 24px)', padding: 4,
               }}>
                 {projects.map(p => (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
                     <button onClick={() => { onProjectChange(p.id); setPickerOpen(false); }} style={{
-                      flex: 1, display: 'flex', alignItems: 'center', gap: 10,
+                      flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10,
                       padding: '8px 10px', border: 'none',
                       background: p.id === project.id ? theme.accentSoft : 'transparent',
                       color: theme.text, borderRadius: 6, cursor: 'pointer',
@@ -392,10 +402,10 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
                     }}>
                       <span style={{ width: 10, height: 10, borderRadius: 3, background: p.color, flexShrink: 0 }}></span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 500 }}>{p.name}</div>
-                        <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }}>{p.description}</div>
+                        <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                        <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</div>
                       </div>
-                      <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace' }}>{p.code}</span>
+                      <span style={{ fontSize: 10.5, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace', flexShrink: 0 }}>{p.code}</span>
                     </button>
                     {(p.userRole === 'owner' || p.userRole === 'admin') && (
                       <button onClick={() => { onShareProject(p); setPickerOpen(false); }} title="Share project" style={{
@@ -440,10 +450,10 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
         </div>
 
         {/* View tabs */}
-        <div style={{ display: 'flex', gap: 2, padding: 2, background: theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderRadius: 7 }}>
-          {[['dashboard', 'Dashboard'], ['cards', 'Cards']].map(([k, l]) => (
+        <div style={{ display: 'flex', gap: 2, padding: 2, background: theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderRadius: 7, flexShrink: 0 }}>
+          {[['dashboard', isMobile ? 'Dash' : 'Dashboard'], ['cards', 'Cards']].map(([k, l]) => (
             <button key={k} onClick={() => onViewChange(k)} style={{
-              padding: '5px 12px', fontSize: 12.5, border: 'none', borderRadius: 5,
+              padding: isMobile ? '5px 8px' : '5px 12px', fontSize: 12.5, border: 'none', borderRadius: 5,
               background: view === k ? theme.surface : 'transparent',
               color: view === k ? theme.text : theme.textMuted,
               cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
@@ -453,90 +463,206 @@ function Header({ theme, project, projects, onProjectChange, view, onViewChange,
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ fontSize: 11.5, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace', marginRight: 6 }}>⌘K</div>
-        <button onClick={() => updateTweak({ dark: !tweaks.dark })} title="Toggle theme" style={{
-          width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
-          background: theme.surface, color: theme.textMuted, cursor: 'pointer',
-          display: 'grid', placeItems: 'center',
-        }}>
-          {tweaks.dark
-            ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 8.5a4.5 4.5 0 01-5.5-5.5A5 5 0 107 12a5 5 0 004-3.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
-            : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.3" /><path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.8 2.8l1 1M10.2 10.2l1 1M2.8 11.2l1-1M10.2 3.8l1-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
-          }
-        </button>
-        <button onClick={() => setSettingsOpen(v => !v)} title="Appearance" style={{
-          width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
-          background: settingsOpen ? theme.accentSoft : theme.surface,
-          color: settingsOpen ? theme.accent : theme.textMuted,
-          cursor: 'pointer', display: 'grid', placeItems: 'center',
-        }}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M1 4h12M1 10h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-            <circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
-            <circle cx="10" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
-          </svg>
-        </button>
-        {currentUser?.role === 'admin' && (
-          <button onClick={onAdminOpen} title="Admin" style={{
-            width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
-            background: theme.surface, color: theme.textMuted, cursor: 'pointer',
-            display: 'grid', placeItems: 'center',
-          }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M7 1L2 3.5v4c0 2.8 2.1 5.4 5 6 2.9-.6 5-3.2 5-6v-4L7 1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-            </svg>
-          </button>
-        )}
-        <div style={{ position: 'relative' }}>
-          <button onClick={() => setUserMenuOpen(v => !v)} title={currentUser?.email} style={{
-            width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
-            background: `linear-gradient(135deg, ${theme.accent}, oklch(0.62 0.15 ${((tweaks.accentHue + 60) % 360)}))`,
-            display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 600, color: '#fff',
-            outline: userMenuOpen ? `2px solid ${theme.accent}` : 'none', outlineOffset: 2,
-          }}>{initials}</button>
-          {userMenuOpen && (
-            <>
-              <div onClick={closeUserMenu} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
-              <div style={{
-                position: 'absolute', right: 0, top: 36, zIndex: 6,
-                background: theme.surface, border: `1px solid ${theme.border}`,
-                borderRadius: 8, width: 210, padding: 4,
-                boxShadow: theme.dark ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.08)',
-                fontFamily: 'inherit',
-              }}>
-                <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${theme.border}`, marginBottom: 4 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser?.email}</div>
-                  {currentUser?.role === 'admin' && (
-                    <div style={{ fontSize: 10.5, color: theme.accent, marginTop: 1 }}>Administrator</div>
-                  )}
-                </div>
-                <button onClick={() => { closeUserMenu(); onLogout(); }} style={{
-                  width: '100%', padding: '7px 12px', border: 'none', background: 'transparent',
-                  color: theme.textMuted, textAlign: 'left', cursor: 'pointer',
-                  fontSize: 12.5, fontFamily: 'inherit', borderRadius: 5,
-                }}>Sign out</button>
-                <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }} />
-                {deleteConfirm
-                  ? <div style={{ padding: '8px 12px' }}>
-                      <div style={{ fontSize: 12, color: theme.danger, marginBottom: 8 }}>
-                        Delete your account and all projects?
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <window.Button theme={theme} variant="danger" size="sm" onClick={onDeleteAccount}>Delete</window.Button>
-                        <window.Button theme={theme} variant="ghost"  size="sm" onClick={() => setDeleteConfirm(false)}>Cancel</window.Button>
-                      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        {isMobile ? (
+          // ── Mobile: hamburger menu ──────────────────────────────────────────
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setHamburgerOpen(v => !v)}
+              title="Menu"
+              style={{
+                width: 34, height: 34, borderRadius: 7,
+                border: `1px solid ${theme.border}`,
+                background: hamburgerOpen ? theme.accentSoft : theme.surface,
+                color: hamburgerOpen ? theme.accent : theme.textMuted,
+                cursor: 'pointer', display: 'grid', placeItems: 'center',
+              }}
+            >
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
+                <path d="M1 1h14M1 6h14M1 11h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+            </button>
+            {hamburgerOpen && (
+              <>
+                <div onClick={() => { setHamburgerOpen(false); setHamburgerDeleteConfirm(false); }} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
+                <div style={{
+                  position: 'absolute', right: 0, top: 42, zIndex: 6,
+                  background: theme.surface, border: `1px solid ${theme.border}`,
+                  borderRadius: 10, width: 240, padding: 6,
+                  boxShadow: theme.dark ? '0 16px 48px rgba(0,0,0,0.6)' : '0 16px 48px rgba(0,0,0,0.12)',
+                  fontFamily: 'inherit',
+                }}>
+                  {/* Signed-in user */}
+                  <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border}`, marginBottom: 4 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser?.email}</div>
+                    {currentUser?.role === 'admin' && <div style={{ fontSize: 10.5, color: theme.accent, marginTop: 1 }}>Administrator</div>}
+                  </div>
+
+                  {/* Theme toggle */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px' }}>
+                    <span style={{ fontSize: 12.5, color: theme.text }}>Theme</span>
+                    <div style={{ display: 'inline-flex', padding: 2, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 6 }}>
+                      {[['light','Light'],['dark','Dark']].map(([k,l]) => {
+                        const active = (tweaks.dark ? 'dark' : 'light') === k;
+                        return (
+                          <button key={k} onClick={() => updateTweak({ dark: k === 'dark' })} style={{
+                            padding: '3px 10px', fontSize: 11.5, border: 'none', borderRadius: 4,
+                            background: active ? theme.surfaceElev : 'transparent',
+                            color: active ? theme.text : theme.textMuted,
+                            cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
+                            boxShadow: active ? (theme.dark ? '0 1px 0 rgba(255,255,255,0.05)' : '0 1px 2px rgba(0,0,0,0.06)') : 'none',
+                          }}>{l}</button>
+                        );
+                      })}
                     </div>
-                  : <button onClick={() => setDeleteConfirm(true)} style={{
+                  </div>
+
+                  {/* Appearance */}
+                  <button onClick={() => { setHamburgerOpen(false); setSettingsOpen(true); }} style={{
+                    width: '100%', padding: '8px 12px', border: 'none', background: 'transparent',
+                    color: theme.text, textAlign: 'left', cursor: 'pointer',
+                    fontSize: 12.5, fontFamily: 'inherit', borderRadius: 6,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: theme.textMuted, flexShrink: 0 }}>
+                      <path d="M1 4h12M1 10h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                      <circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
+                      <circle cx="10" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
+                    </svg>
+                    Appearance
+                  </button>
+
+                  {/* Admin panel */}
+                  {currentUser?.role === 'admin' && (
+                    <button onClick={() => { setHamburgerOpen(false); onAdminOpen(); }} style={{
+                      width: '100%', padding: '8px 12px', border: 'none', background: 'transparent',
+                      color: theme.text, textAlign: 'left', cursor: 'pointer',
+                      fontSize: 12.5, fontFamily: 'inherit', borderRadius: 6,
+                      display: 'flex', alignItems: 'center', gap: 10,
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: theme.textMuted, flexShrink: 0 }}>
+                        <path d="M7 1L2 3.5v4c0 2.8 2.1 5.4 5 6 2.9-.6 5-3.2 5-6v-4L7 1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                      </svg>
+                      Admin panel
+                    </button>
+                  )}
+
+                  <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }} />
+
+                  <button onClick={() => { setHamburgerOpen(false); onLogout(); }} style={{
+                    width: '100%', padding: '8px 12px', border: 'none', background: 'transparent',
+                    color: theme.textMuted, textAlign: 'left', cursor: 'pointer',
+                    fontSize: 12.5, fontFamily: 'inherit', borderRadius: 6,
+                  }}>Sign out</button>
+
+                  <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }} />
+
+                  {hamburgerDeleteConfirm
+                    ? <div style={{ padding: '8px 12px' }}>
+                        <div style={{ fontSize: 12, color: theme.danger, marginBottom: 8 }}>Delete your account and all projects?</div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <window.Button theme={theme} variant="danger" size="sm" onClick={onDeleteAccount}>Delete</window.Button>
+                          <window.Button theme={theme} variant="ghost" size="sm" onClick={() => setHamburgerDeleteConfirm(false)}>Cancel</window.Button>
+                        </div>
+                      </div>
+                    : <button onClick={() => setHamburgerDeleteConfirm(true)} style={{
+                        width: '100%', padding: '8px 12px', border: 'none', background: 'transparent',
+                        color: theme.danger, textAlign: 'left', cursor: 'pointer',
+                        fontSize: 12.5, fontFamily: 'inherit', borderRadius: 6,
+                      }}>Delete account…</button>
+                  }
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          // ── Desktop: individual icon buttons ───────────────────────────────
+          <>
+            <div style={{ fontSize: 11.5, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace', marginRight: 6 }}>⌘K</div>
+            <button onClick={() => updateTweak({ dark: !tweaks.dark })} title="Toggle theme" style={{
+              width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
+              background: theme.surface, color: theme.textMuted, cursor: 'pointer',
+              display: 'grid', placeItems: 'center',
+            }}>
+              {tweaks.dark
+                ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 8.5a4.5 4.5 0 01-5.5-5.5A5 5 0 107 12a5 5 0 004-3.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+                : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.3" /><path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.8 2.8l1 1M10.2 10.2l1 1M2.8 11.2l1-1M10.2 3.8l1-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+              }
+            </button>
+            <button onClick={() => setSettingsOpen(v => !v)} title="Appearance" style={{
+              width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
+              background: settingsOpen ? theme.accentSoft : theme.surface,
+              color: settingsOpen ? theme.accent : theme.textMuted,
+              cursor: 'pointer', display: 'grid', placeItems: 'center',
+            }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M1 4h12M1 10h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
+                <circle cx="10" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.3" fill={theme.surface}/>
+              </svg>
+            </button>
+            {currentUser?.role === 'admin' && (
+              <button onClick={onAdminOpen} title="Admin" style={{
+                width: 30, height: 30, borderRadius: 6, border: `1px solid ${theme.border}`,
+                background: theme.surface, color: theme.textMuted, cursor: 'pointer',
+                display: 'grid', placeItems: 'center',
+              }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 1L2 3.5v4c0 2.8 2.1 5.4 5 6 2.9-.6 5-3.2 5-6v-4L7 1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setUserMenuOpen(v => !v)} title={currentUser?.email} style={{
+                width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                background: `linear-gradient(135deg, ${theme.accent}, oklch(0.62 0.15 ${((tweaks.accentHue + 60) % 360)}))`,
+                display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 600, color: '#fff',
+                outline: userMenuOpen ? `2px solid ${theme.accent}` : 'none', outlineOffset: 2,
+              }}>{initials}</button>
+              {userMenuOpen && (
+                <>
+                  <div onClick={closeUserMenu} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
+                  <div style={{
+                    position: 'absolute', right: 0, top: 36, zIndex: 6,
+                    background: theme.surface, border: `1px solid ${theme.border}`,
+                    borderRadius: 8, width: 210, padding: 4,
+                    boxShadow: theme.dark ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(0,0,0,0.08)',
+                    fontFamily: 'inherit',
+                  }}>
+                    <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${theme.border}`, marginBottom: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser?.email}</div>
+                      {currentUser?.role === 'admin' && (
+                        <div style={{ fontSize: 10.5, color: theme.accent, marginTop: 1 }}>Administrator</div>
+                      )}
+                    </div>
+                    <button onClick={() => { closeUserMenu(); onLogout(); }} style={{
                       width: '100%', padding: '7px 12px', border: 'none', background: 'transparent',
-                      color: theme.danger, textAlign: 'left', cursor: 'pointer',
+                      color: theme.textMuted, textAlign: 'left', cursor: 'pointer',
                       fontSize: 12.5, fontFamily: 'inherit', borderRadius: 5,
-                    }}>Delete account…</button>
-                }
-              </div>
-            </>
-          )}
-        </div>
+                    }}>Sign out</button>
+                    <div style={{ borderTop: `1px solid ${theme.border}`, margin: '4px 0' }} />
+                    {deleteConfirm
+                      ? <div style={{ padding: '8px 12px' }}>
+                          <div style={{ fontSize: 12, color: theme.danger, marginBottom: 8 }}>
+                            Delete your account and all projects?
+                          </div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <window.Button theme={theme} variant="danger" size="sm" onClick={onDeleteAccount}>Delete</window.Button>
+                            <window.Button theme={theme} variant="ghost"  size="sm" onClick={() => setDeleteConfirm(false)}>Cancel</window.Button>
+                          </div>
+                        </div>
+                      : <button onClick={() => setDeleteConfirm(true)} style={{
+                          width: '100%', padding: '7px 12px', border: 'none', background: 'transparent',
+                          color: theme.danger, textAlign: 'left', cursor: 'pointer',
+                          fontSize: 12.5, fontFamily: 'inherit', borderRadius: 5,
+                        }}>Delete account…</button>
+                    }
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
       {settingsOpen && (
         <SettingsModal theme={theme} tweaks={tweaks} updateTweak={updateTweak}
@@ -615,6 +741,53 @@ const PROJECT_COLORS = [
   '#ec4899','#a855f7','#64748b','#78716c',
 ];
 
+function TagEditor({ theme, values, onChange, placeholder }) {
+  const [draft, setDraft] = React.useState('');
+
+  const add = () => {
+    const v = draft.trim().toLowerCase().replace(/[^a-z0-9\-_ ]/g, '');
+    if (v && !values.includes(v)) onChange([...values, v]);
+    setDraft('');
+  };
+
+  const remove = (v) => {
+    if (values.length <= 1) return;
+    onChange(values.filter(x => x !== v));
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 7, minHeight: 28 }}>
+        {values.map(v => (
+          <span key={v} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '2px 7px 2px 8px',
+            background: theme.accentSoft, borderRadius: 5,
+            fontSize: 12, color: theme.accent, fontFamily: 'ui-monospace, Menlo, monospace',
+          }}>
+            {v}
+            {values.length > 1 && (
+              <button onClick={() => remove(v)} style={{
+                border: 'none', background: 'transparent', color: 'inherit',
+                cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: 14,
+                display: 'flex', alignItems: 'center',
+              }}>×</button>
+            )}
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Input theme={theme} value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder={placeholder}
+          style={{ fontSize: 12, padding: '6px 10px' }} />
+        <Button theme={theme} variant="ghost" size="sm" onClick={add} disabled={!draft.trim()}>Add</Button>
+      </div>
+    </div>
+  );
+}
+
 function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
   const isNew = !initialProject.id;
   const [name, setName]             = React.useState(initialProject.name        || '');
@@ -622,6 +795,8 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
   const [description, setDescription] = React.useState(initialProject.description || '');
   const [color, setColor]           = React.useState(initialProject.color       || PROJECT_COLORS[0]);
   const [startDate, setStartDate]   = React.useState(initialProject.startDate   || window.TODAY);
+  const [cardTypes,  setCardTypes]  = React.useState(() => initialProject.cardTypes  || window.CARD_TYPES);
+  const [scopeTypes, setScopeTypes] = React.useState(() => initialProject.scopeTypes || window.SCOPES);
   const [saving, setSaving]         = React.useState(false);
   const [error, setError]           = React.useState(null);
 
@@ -638,7 +813,7 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
     setSaving(true);
     setError(null);
     try {
-      await onSave({ name: name.trim(), code: code.trim(), description: description.trim(), color, startDate });
+      await onSave({ name: name.trim(), code: code.trim(), description: description.trim(), color, startDate, cardTypes, scopeTypes });
     } catch (e) {
       setError(e.message);
       setSaving(false);
@@ -663,6 +838,7 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
         position: 'relative', zIndex: 1,
         background: theme.surface, border: `1px solid ${theme.borderStrong}`,
         borderRadius: 12, width: 440, padding: 24,
+        maxHeight: '90vh', overflowY: 'auto',
         boxShadow: theme.dark ? '0 24px 80px rgba(0,0,0,0.6)' : '0 24px 80px rgba(0,0,0,0.14)',
         fontFamily: 'Inter, system-ui, sans-serif', color: theme.text,
       }}>
@@ -700,7 +876,7 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
         </div>
 
         {/* Color swatches */}
-        <div style={{ marginBottom: 22 }}>
+        <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 8 }}>Color</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {PROJECT_COLORS.map(c => (
@@ -712,6 +888,18 @@ function ProjectModal({ theme, initialProject, onSave, onDelete, onClose }) {
               }} />
             ))}
           </div>
+        </div>
+
+        {/* Card types */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 6 }}>Card types</div>
+          <TagEditor theme={theme} values={cardTypes} onChange={setCardTypes} placeholder="e.g. story" />
+        </div>
+
+        {/* Scope types */}
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 6 }}>Scope types</div>
+          <TagEditor theme={theme} values={scopeTypes} onChange={setScopeTypes} placeholder="e.g. v2" />
         </div>
 
         {error && (

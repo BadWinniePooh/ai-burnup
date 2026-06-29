@@ -95,6 +95,8 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
 
   const handleNew = () => {
     const maxNum = filtered.reduce((m, c) => Math.max(m, c.cardNumber || 0), 0);
+    const types  = project.cardTypes  || window.CARD_TYPES;
+    const scopes = project.scopeTypes || window.SCOPES;
     const newReq = {
       cardNumber:     maxNum + 1,
       projectId:      project.id,
@@ -104,8 +106,8 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
       endDate:        null,
       estimation:     1,
       estimationUnit: 'days',
-      type:           'feature',
-      scope:          'mvp',
+      type:           types[0]  || 'feature',
+      scope:          scopes[0] || 'mvp',
     };
     window.api.createCard(newReq).then(card => {
       setCards(prev => [...prev, card]);
@@ -144,9 +146,9 @@ function CardsView({ project, cards, setCards, theme, selectedUid, setSelectedUi
           <FilterPill theme={theme} label="Status" value={statusFilter} onChange={setStatusFilter}
             options={[['all', 'All'], ['backlog', 'Backlog'], ['active', 'Active'], ['done', 'Done']]} />
           <FilterPill theme={theme} label="Type" value={typeFilter} onChange={setTypeFilter}
-            options={[['all', 'All'], ...window.CARD_TYPES.map(tp => [tp, window.TYPE_META[tp].label])]} />
+            options={[['all', 'All'], ...(project.cardTypes || window.CARD_TYPES).map(tp => [tp, window.TYPE_META[tp]?.label ?? tp])]} />
           <FilterPill theme={theme} label="Scope" value={scopeFilter} onChange={setScopeFilter}
-            options={[['all', 'All'], ...window.SCOPES.map(s => [s, s.toUpperCase()])]} />
+            options={[['all', 'All'], ...(project.scopeTypes || window.SCOPES).map(s => [s, s.toUpperCase()])]} />
           <FilterPill theme={theme} label="Sort" value={sortBy} onChange={setSortBy}
             options={[['id','ID'], ['created','Created'], ['started','Started'], ['ended','Ended'], ['estimation','Estimation']]} />
           <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} style={{
@@ -370,13 +372,17 @@ function CardEditForm({ card, project, allCards, theme, onUpdate, onApiSave, onD
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 22 }}>
         <FormField label="Card type" theme={theme}>
           <window.Select theme={theme} value={local.type} onChange={e => update({ type: e.target.value })}>
-            {window.CARD_TYPES.map(t => <option key={t} value={t}>{window.TYPE_META[t].label}</option>)}
+            {(project.cardTypes || window.CARD_TYPES).map(t => (
+              <option key={t} value={t}>{window.TYPE_META[t]?.label ?? t}</option>
+            ))}
           </window.Select>
         </FormField>
 
         <FormField label="Project scope" theme={theme}>
           <window.Select theme={theme} value={local.scope} onChange={e => update({ scope: e.target.value })}>
-            {window.SCOPES.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+            {(project.scopeTypes || window.SCOPES).map(s => (
+              <option key={s} value={s}>{s.toUpperCase()}</option>
+            ))}
           </window.Select>
         </FormField>
 

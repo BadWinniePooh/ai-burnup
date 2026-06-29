@@ -78,6 +78,7 @@ function Input({ theme, style, ...rest }) {
     color: theme.text,
     fontFamily: 'inherit',
     width: '100%',
+    boxSizing: 'border-box',
     outline: 'none',
     transition: 'border-color 0.12s, box-shadow 0.12s',
     ...style,
@@ -98,6 +99,7 @@ function Select({ theme, children, style, ...rest }) {
     color: theme.text,
     fontFamily: 'inherit',
     width: '100%',
+    boxSizing: 'border-box',
     outline: 'none',
     appearance: 'none',
     WebkitAppearance: 'none',
@@ -145,8 +147,9 @@ const TYPE_META = {
 };
 
 function TypeGlyph({ type, size = 16, theme }) {
-  const m = TYPE_META[type] || TYPE_META.feature;
-  const hue = theme?.typeHues?.[type] ?? m.hue;
+  const m = TYPE_META[type];
+  const hue   = theme?.typeHues?.[type] ?? (m?.hue ?? 258);
+  const letter = m?.letter ?? (type?.[0]?.toUpperCase() ?? '?');
   const color = `oklch(0.62 0.13 ${hue})`;
   const bg = `color-mix(in oklch, ${color} 18%, transparent)`;
   return <span style={{
@@ -162,7 +165,7 @@ function TypeGlyph({ type, size = 16, theme }) {
     fontWeight: 600,
     fontFamily: 'ui-monospace, Menlo, monospace',
     flexShrink: 0,
-  }}>{m.letter}</span>;
+  }}>{letter}</span>;
 }
 
 function StatusDot({ card, theme }) {

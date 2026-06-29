@@ -386,6 +386,19 @@ public class DataStore(BurnupDbContext db)
         await db.SaveChangesAsync();
     }
 
+    // Delete all snapshots on or after fromDate so they are recomputed from live card data.
+    public async Task DeleteSnapshotsFromAsync(string projectId, DateOnly fromDate)
+    {
+        var rows = await db.Snapshots
+            .Where(s => s.ProjectId == projectId && s.Date >= fromDate)
+            .ToListAsync();
+        if (rows.Count > 0)
+        {
+            db.Snapshots.RemoveRange(rows);
+            await db.SaveChangesAsync();
+        }
+    }
+
     public async Task EnsurePastSnapshotsAsync(string projectId, List<Card> cards, DateOnly from, DateOnly through)
     {
         if (through < from) return;

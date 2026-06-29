@@ -39,6 +39,12 @@ function Dashboard({ project, cards, theme, chartStyle = 'area', externalSeries 
   });
   const [builderOpen, setBuilderOpen]   = React.useState(false);
   const [editingChart, setEditingChart] = React.useState(null);
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 640);
+  React.useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Re-fetch burnup whenever project or cards change in a chart-relevant way.
   const burnupKey = React.useMemo(() => {
@@ -157,55 +163,61 @@ function Dashboard({ project, cards, theme, chartStyle = 'area', externalSeries 
   }
 
   return (
-    <div style={{ padding: '24px 28px 48px', maxWidth: 1280, margin: '0 auto' }}>
+    <div style={{ padding: isMobile ? '16px 16px 40px' : '24px 28px 48px', maxWidth: 1280, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24, gap: 24 }}>
-        <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: isMobile ? 16 : 24, gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 11, color: theme.textSubtle, fontFamily: 'ui-monospace, Menlo, monospace', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             {project.code} · Reporting
           </div>
-          <h1 style={{ fontSize: 28, fontWeight: 600, margin: 0, letterSpacing: '-0.02em' }}>{project.name}</h1>
-          <div style={{ color: theme.textMuted, fontSize: 14, marginTop: 4 }}>{project.description}</div>
+          <h1 style={{ fontSize: isMobile ? 20 : 28, fontWeight: 600, margin: 0, letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</h1>
+          {!isMobile && <div style={{ color: theme.textMuted, fontSize: 14, marginTop: 4 }}>{project.description}</div>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: theme.success, boxShadow: `0 0 0 3px color-mix(in oklch, ${theme.success} 25%, transparent)` }}></span>
-          Live · updated {window.TODAY}
-        </div>
+        {!isMobile && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: theme.textMuted, fontFamily: 'ui-monospace, Menlo, monospace', flexShrink: 0 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: theme.success, boxShadow: `0 0 0 3px color-mix(in oklch, ${theme.success} 25%, transparent)` }}></span>
+            Live · updated {window.TODAY}
+          </div>
+        )}
       </div>
 
       {/* Stat grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
         <StatCard theme={theme} label="Total cards"   value={latest.scopeCount}                        sub={`${remaining} remaining`} />
         <StatCard theme={theme} label="Completed"     value={latest.doneCount}                         sub={`${pctCards}% of scope`} accent />
         <StatCard theme={theme} label="Scope · days"  value={Math.round(latest.scopeDays)}             sub={`${Math.round(latest.doneDays)} done · ${pctDays}%`} />
         <StatCard theme={theme} label="Velocity"      value={`${doneRatePerDay.toFixed(2)}/d`}         sub={`scope +${scopeRatePerDay.toFixed(2)}/d · ${doneInWindow} done last ${windowDays}d`} />
       </div>
 
-      {/* Charts row — horizontally scrollable */}
-      <div style={{ overflowX: 'auto', marginBottom: 20, paddingBottom: 4 }}>
-        <div style={{ display: 'flex', gap: 12, minWidth: 'min-content', alignItems: 'stretch' }}>
-          <div style={{ flex: '0 0 min(calc(50% - 6px), 540px)', minWidth: 320 }}>
+      {/* Charts — stacked on mobile, side-by-side (scrollable) on desktop */}
+      <div style={isMobile
+        ? { display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }
+        : { overflowX: 'auto', marginBottom: 20, paddingBottom: 4 }}>
+        <div style={isMobile
+          ? {}
+          : { display: 'flex', gap: 12, minWidth: 'min-content', alignItems: 'stretch' }}>
+          <div style={isMobile ? {} : { flex: '0 0 min(calc(50% - 6px), 540px)', minWidth: 320 }}>
             <ChartCard
               theme={theme}
               title="Cards burnup"
               subtitle="Total scope vs. completed cards over time"
               pct={pctCards}
               loading={burnupLoading}
-              chart={<window.BurnupChart data={countSeries} scopeLabel="Scope" doneLabel="Done" accent={theme.accent} muted={theme.textMuted} dark={theme.dark} style={chartStyle} height={260} />}
+              chart={<window.BurnupChart data={countSeries} scopeLabel="Scope" doneLabel="Done" accent={theme.accent} muted={theme.textMuted} dark={theme.dark} style={chartStyle} height={isMobile ? 200 : 260} />}
             />
           </div>
-          <div style={{ flex: '0 0 min(calc(50% - 6px), 540px)', minWidth: 320 }}>
+          <div style={isMobile ? { marginTop: 0 } : { flex: '0 0 min(calc(50% - 6px), 540px)', minWidth: 320 }}>
             <ChartCard
               theme={theme}
               title="Effort burnup · days"
               subtitle="Total estimated days vs. days delivered"
               pct={pctDays}
               loading={burnupLoading}
-              chart={<window.BurnupChart data={daysSeries} scopeLabel="Total d" doneLabel="Done d" accent={theme.accent} muted={theme.textMuted} dark={theme.dark} style={chartStyle} height={260} />}
+              chart={<window.BurnupChart data={daysSeries} scopeLabel="Total d" doneLabel="Done d" accent={theme.accent} muted={theme.textMuted} dark={theme.dark} style={chartStyle} height={isMobile ? 200 : 260} />}
             />
           </div>
           {customCharts.map(cfg => (
-            <div key={cfg.id} style={{ flex: '0 0 min(calc(50% - 6px), 540px)', minWidth: 320 }}>
+            <div key={cfg.id} style={isMobile ? {} : { flex: '0 0 min(calc(50% - 6px), 540px)', minWidth: 320 }}>
               <CustomChartCard
                 theme={theme}
                 config={cfg}
@@ -218,7 +230,7 @@ function Dashboard({ project, cards, theme, chartStyle = 'area', externalSeries 
               />
             </div>
           ))}
-          <div style={{ flex: '0 0 180px', minWidth: 160 }}>
+          <div style={isMobile ? { minHeight: 80 } : { flex: '0 0 180px', minWidth: 160 }}>
             <AddChartButton theme={theme} onClick={() => { setEditingChart(null); setBuilderOpen(true); }} />
           </div>
         </div>
@@ -227,14 +239,15 @@ function Dashboard({ project, cards, theme, chartStyle = 'area', externalSeries 
       {builderOpen && (
         <ChartBuilderModal
           theme={theme}
+          project={project}
           initial={editingChart}
           onSave={handleSaveChart}
           onClose={() => { setBuilderOpen(false); setEditingChart(null); }}
         />
       )}
 
-      {/* Breakdown row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+      {/* Breakdown row — stacked on mobile */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
         <BreakdownCard theme={theme} title="By type"  items={byType}  meta={window.TYPE_META} mode="type" />
         <BreakdownCard theme={theme} title="By scope" items={byScope} mode="scope" />
         <ProjectionCard theme={theme} combined={combined} cardsProj={cardsProj} effortProj={effortProj}
@@ -453,14 +466,14 @@ function AddChartButton({ theme, onClick }) {
   );
 }
 
-const CHART_TYPES  = [['feature','Feature'],['bug','Bug'],['no-code','No-code'],['tiny','Tiny']];
-const CHART_SCOPES = [['mvp','MVP'],['mlp','MLP'],['other','Other']];
-
-function ChartBuilderModal({ theme, initial, onSave, onClose }) {
+function ChartBuilderModal({ theme, project, initial, onSave, onClose }) {
   const [title,       setTitle]       = React.useState(initial?.title || '');
   const [metric,      setMetric]      = React.useState(initial?.metric || 'cards');
   const [typeFilter,  setTypeFilter]  = React.useState(initial?.typeFilter  || []);
   const [scopeFilter, setScopeFilter] = React.useState(initial?.scopeFilter || []);
+
+  const chartTypes  = (project?.cardTypes  || window.CARD_TYPES).map(t => [t, window.TYPE_META[t]?.label ?? t]);
+  const chartScopes = (project?.scopeTypes || window.SCOPES).map(s => [s, s.toUpperCase()]);
 
   React.useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -520,7 +533,7 @@ function ChartBuilderModal({ theme, initial, onSave, onClose }) {
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 8 }}>Filter by card type <span style={{ opacity: 0.6 }}>(empty = all)</span></div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {CHART_TYPES.map(([k, l]) => {
+            {chartTypes.map(([k, l]) => {
               const active = typeFilter.includes(k);
               return (
                 <button key={k} onClick={() => toggleFilter(typeFilter, setTypeFilter, k)} style={{
@@ -537,7 +550,7 @@ function ChartBuilderModal({ theme, initial, onSave, onClose }) {
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11.5, color: theme.textMuted, marginBottom: 8 }}>Filter by scope <span style={{ opacity: 0.6 }}>(empty = all)</span></div>
           <div style={{ display: 'flex', gap: 6 }}>
-            {CHART_SCOPES.map(([k, l]) => {
+            {chartScopes.map(([k, l]) => {
               const active = scopeFilter.includes(k);
               return (
                 <button key={k} onClick={() => toggleFilter(scopeFilter, setScopeFilter, k)} style={{

@@ -13,9 +13,7 @@ namespace BurnupApi.Controllers;
 [Authorize]
 public class CardsController(DataStore store) : ControllerBase
 {
-    private static readonly string[] ValidTypes  = ["feature", "bug", "no-code", "tiny"];
-    private static readonly string[] ValidScopes = ["mvp", "mlp", "other"];
-    private static readonly string[] ValidUnits  = ["days", "points"];
+    private static readonly string[] ValidUnits = ["days", "points"];
 
     private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
     private bool IsSysAdmin    => User.IsInRole("admin");
@@ -68,7 +66,11 @@ public class CardsController(DataStore store) : ControllerBase
         if (role is null) return BadRequest($"Project '{req.ProjectId}' not found.");
         if (!CanEdit(role)) return Forbid();
 
+        var project = await store.GetProjectAsync(req.ProjectId);
+        if (project is null) return BadRequest($"Project '{req.ProjectId}' not found.");
+
         if (ValidateCard(req.Type, req.Scope, req.EstimationUnit, req.CreatedDate, req.StartedDate, req.EndDate,
+            project.GetCardTypesList(), project.GetScopeTypesList(),
             out var error, out var created, out var started, out var ended))
             return BadRequest(error);
 
@@ -94,7 +96,7 @@ public class CardsController(DataStore store) : ControllerBase
         };
 
         await store.AddCardAsync(card);
-        var project = await store.GetProjectAsync(card.ProjectId);
+        await store.DeleteSnapshotsFromAsync(card.ProjectId, card.CreatedDate);
         return CreatedAtAction(nameof(Get), new { uid = card.Uid }, ToResponse(card, project));
     }
 
@@ -108,12 +110,21 @@ public class CardsController(DataStore store) : ControllerBase
         if (role is null) return NotFound();
         if (!CanEdit(role)) return Forbid();
 
+        var project = await store.GetProjectAsync(existing.ProjectId);
+        if (project is null) return NotFound();
+
         if (ValidateCard(req.Type, req.Scope, req.EstimationUnit, req.CreatedDate, req.StartedDate, req.EndDate,
+            project.GetCardTypesList(), project.GetScopeTypesList(),
             out var error, out var created, out var started, out var ended))
             return BadRequest(error);
 
         if (await store.CardNumberConflictsAsync(existing.ProjectId, uid, req.CardNumber))
             return Conflict($"Card number {req.CardNumber} is already used in project '{existing.ProjectId}'.");
+
+        // Capture old dates before EF overwrites the tracked entity in UpdateCardAsync
+        var oldCreated = existing.CreatedDate;
+        var oldStarted = existing.StartedDate;
+        var oldEnded   = existing.EndDate;
 
         var updated = new Card
         {
@@ -132,7 +143,13 @@ public class CardsController(DataStore store) : ControllerBase
         };
 
         await store.UpdateCardAsync(updated);
-        var project = await store.GetProjectAsync(updated.ProjectId);
+
+        // Invalidate snapshots from the earliest date either version of the card affects
+        var allDates = new[] { oldCreated, created }
+            .Concat(new[] { oldStarted, oldEnded, started, ended }
+                .Where(d => d.HasValue).Select(d => d!.Value));
+        await store.DeleteSnapshotsFromAsync(updated.ProjectId, allDates.Min());
+
         return Ok(ToResponse(updated, project));
     }
 
@@ -146,7 +163,9 @@ public class CardsController(DataStore store) : ControllerBase
         if (role is null) return NotFound();
         if (!CanEdit(role)) return Forbid();
 
-        return await store.DeleteCardAsync(uid) ? NoContent() : NotFound();
+        if (!await store.DeleteCardAsync(uid)) return NotFound();
+        await store.DeleteSnapshotsFromAsync(card.ProjectId, card.CreatedDate);
+        return NoContent();
     }
 
     // ── Helpers ───────────────────────────────────────────────────
@@ -177,6 +196,7 @@ public class CardsController(DataStore store) : ControllerBase
     private static bool ValidateCard(
         string type, string scope, string estimationUnit,
         string createdDateStr, string? startedDateStr, string? endDateStr,
+        string[] validTypes, string[] validScopes,
         out string? error,
         out DateOnly createdDate, out DateOnly? startedDate, out DateOnly? endDate)
     {
@@ -184,11 +204,11 @@ public class CardsController(DataStore store) : ControllerBase
         startedDate = null;
         endDate     = null;
 
-        if (!ValidTypes.Contains(type))
-        { error = $"Type must be one of: {string.Join(", ", ValidTypes)}."; return true; }
+        if (!validTypes.Contains(type))
+        { error = $"Type must be one of: {string.Join(", ", validTypes)}."; return true; }
 
-        if (!ValidScopes.Contains(scope))
-        { error = $"Scope must be one of: {string.Join(", ", ValidScopes)}."; return true; }
+        if (!validScopes.Contains(scope))
+        { error = $"Scope must be one of: {string.Join(", ", validScopes)}."; return true; }
 
         if (!ValidUnits.Contains(estimationUnit))
         { error = $"EstimationUnit must be one of: {string.Join(", ", ValidUnits)}."; return true; }
